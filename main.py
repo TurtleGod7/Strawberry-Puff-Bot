@@ -30,8 +30,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-names = ()
-
 @bot.event
 async def on_ready():
     await bot.tree.sync()
@@ -53,20 +51,6 @@ async def on_ready():
     """)
     conn.close
     print(f'Logged in as {bot.user}')    
-
-@bot.event
-async def on_guild_join(guild):
-    bot_member = guild.get_member(bot.user.id)
-    bot_role = discord.utils.get(guild.roles, name="Bot")
-    
-    if not bot_role:
-        bot_role = await guild.create_role(name="Bot")
-    
-    permissions = discord.Permissions(send_message=True, attach_files=True, read_message_history=True)
-    
-    await bot_member.add_roles(bot_role)
-    
-    await bot_role.edit(permissions=permissions)
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
 async def Roll_a_puff(interaction: discord.Interaction):
