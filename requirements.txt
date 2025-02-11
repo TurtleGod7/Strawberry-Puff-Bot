@@ -1,0 +1,5 @@
+discord
+random
+sqlite3
+dotenv
+random
