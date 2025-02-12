@@ -80,7 +80,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     item_id, name, description, image_path, weights = choice
     
-    chance = round(weights/int(total_weight), 4)*100
+    chance = round(round(weights/int(total_weight), 4)*100,2)
     if os.name == "nt":
         image_path = f"assets\\puffs\\{image_path}"
     else:
