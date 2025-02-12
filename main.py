@@ -63,14 +63,24 @@ async def Roll_a_puff(interaction: discord.Interaction):
     cursor.execute("SELECT * FROM puffs")
     rows = cursor.fetchall()
     
-    cursor.close()
-    
     if rows:
-        choice = random.choice(rows)
+        cursor.execute("SELECT id, weight FROM puffs")
+        data =  cursor.fetchall()
+        items, weights = zip(*data)
+        selected_id = random.choices(items, weights=weights, k=1)[0]
+
+        cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
+        choice = cursor.fetchone()
+        
+        cursor.execute("SELECT SUM(weight) FROM puffs")
+        total_weight = cursor.fetchone()[0]
+        cursor.close()
     else:
-        await interaction.response.send_message("There's been an issue, please contact the developer for more assitance")
+        await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
     
-    item_id, name, description, image_path = choice
+    item_id, name, description, image_path, weights = choice
+    
+    chance = round(weights/int(total_weight), 4)*100
     if os.name == "nt":
         image_path = f"assets\\puffs\\{image_path}"
     else:
@@ -78,7 +88,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     img = discord.File(image_path, filename=image_path)
     
     await interaction.response.send_message(
-        f"You got a {name}.\nIt is {description}\n",
+        f"You got a {name}.\nIt is {description}\nIt was a {chance}% chance to roll this puff!\n",
         file=img
     )
 bot.run(TOKEN)
