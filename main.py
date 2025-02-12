@@ -62,19 +62,19 @@ async def Roll_a_puff(interaction: discord.Interaction):
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM puffs")
     rows = cursor.fetchall()
-    
+    # Checks if rows exist
     if rows:
         cursor.execute("SELECT id, weight FROM puffs")
         data =  cursor.fetchall()
-        items, weights = zip(*data)
+        items, weights = zip(*data) # Randomly selects a weighted role (id)
         selected_id = random.choices(items, weights=weights, k=1)[0]
 
         cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
-        choice = cursor.fetchone()
+        choice = cursor.fetchone() # Gets the full info from the id
         
         cursor.execute("SELECT SUM(weight) FROM puffs")
         total_weight = cursor.fetchone()[0]
-        cursor.close()
+        cursor.close() # Gets info for the chance calculation
     else:
         await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
     
