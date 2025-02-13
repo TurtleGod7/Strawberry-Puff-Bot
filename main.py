@@ -33,11 +33,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
+    # Hope that this code doesn't run since I've changed the columns already
     
-    if os.name == "nt":
-        conn = sqlite3.connect("assets\\database\\puffs.db")
-    else:
-        conn = sqlite3.connect("assets/database/puffs.db")
+    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
     
     cursor = conn.cursor()
     
@@ -49,6 +47,21 @@ async def on_ready():
         imagepath TEXT NOT NULL
     )
     """)
+    conn.close
+    
+    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        rolls INTEGER,
+        rare rolls INTEGER
+    )               
+    """)
+    
     conn.close
     print(f'Logged in as {bot.user}')    
 
@@ -78,9 +91,27 @@ async def Roll_a_puff(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
     
-    item_id, name, description, image_path, weights = choice
+    item_id, name, description, image_path, weights, isRare = choice
     
     chance = round(round(weights/int(total_weight), 4)*100,2)
+    
+    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    
+    cursor = conn.cursor()
+    
+    user_id = interaction.user.id
+    
+    cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
+    if cursor.fetchone()[0] == 0: 
+        cursor.execute("INSERT INTO stats (username, rolls, rare) VALUES (?,?,?)", (user_id, 0, 0))
+    
+    cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
+    
+    if isRare == 1: cursor.execute("UPDATE stats SET rare = rare + 1 WHERE username = ?", (user_id,))
+    
+    conn.commit()
+    cursor.close()
+    
     if os.name == "nt":
         image_path = f"assets\\puffs\\{image_path}"
     else:
@@ -91,4 +122,35 @@ async def Roll_a_puff(interaction: discord.Interaction):
         f"You got a {name}.\nIt is {description}\nIt was a {chance}% chance to roll this puff!\n",
         file=img
     )
+
+@bot.tree.command(name="statistics", description="Get some info on your rolls")
+async def stats(interaction: discord.Interaction):
+    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    
+    cursor = conn.cursor()
+    
+    user_id = interaction.user.id
+    
+    cursor.execute("SELECT * FROM stats WHERE username = ?", (user_id,))
+    choice = cursor.fetchone()
+    username, rolls, rare = choice
+    
+    cursor.close()
+    
+    embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
+    embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a 5 star **{rare}** times!", inline=False)
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="help")
+async def help(interaction: discord.Interaction):
+    embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.blurple())
+    embed.add_field(name="\\help", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
+    embed.add_field(name="\\statistics", value="This is the statistics function so you can understand more about your luck.")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
+
 bot.run(TOKEN)
