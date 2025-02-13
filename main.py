@@ -180,8 +180,9 @@ async def chances(interaction: discord.Interaction):
 @bot.tree.command(name="help")
 async def help(interaction: discord.Interaction):
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.blurple())
-    embed.add_field(name="\\help", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
+    embed.add_field(name="\\puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
     embed.add_field(name="\\statistics", value="This is the statistics function so you can understand more about your luck.")
+    embed.add_field(name="\\chances", value="This is the chances function that displays information for each puff.")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
