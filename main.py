@@ -158,7 +158,7 @@ async def chances(interaction: discord.Interaction):
     
     if total_weight is None or total_weight == 0: await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
     
-    cursor.execute("SELECT name, weight FROm puffs ORDER by weight ASC")
+    cursor.execute("SELECT name, weight, isRare FROM puffs ORDER by weight ASC")
     items = cursor.fetchall()
     
     cursor.close()
@@ -166,11 +166,14 @@ async def chances(interaction: discord.Interaction):
     
     embed = discord.Embed(title="Puff Weights", color=discord.Color.blurple())
     
-    for name, weight in items:
+    for name, weight, isRare in items:
         chance = round((weight/total_weight)*100, 2)
-        embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
+        if isRare == 1:
+            embed.add_field(name=name+":star:", value=f"{chance:.2f}%", inline=False)
+        else:
+            embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
     
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    embed.set_footer(text=f"Star indicates a 5 star\nRequested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
 
