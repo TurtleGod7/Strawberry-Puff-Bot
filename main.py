@@ -62,16 +62,15 @@ async def on_ready():
     )               
     """)
     
-    conn.close
+    cursor.close()
+    conn.close()
     print(f'Logged in as {bot.user}')    
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
 async def Roll_a_puff(interaction: discord.Interaction):
-    if os.name == "nt":
-        conn = sqlite3.connect("assets\\database\\puffs.db")
-    else:
-        conn = sqlite3.connect("assets/database/puffs.db")
     
+    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
+
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM puffs")
     rows = cursor.fetchall()
@@ -88,6 +87,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         cursor.execute("SELECT SUM(weight) FROM puffs")
         total_weight = cursor.fetchone()[0]
         cursor.close() # Gets info for the chance calculation
+        conn.close()
     else:
         await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
     
@@ -107,10 +107,12 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
     
-    if isRare == 1: cursor.execute("UPDATE stats SET rare = rare + 1 WHERE username = ?", (user_id,))
+    if int(isRare) == 1:
+        cursor.execute("UPDATE stats SET rare = rare + 1 WHERE username = ?", (user_id,))
     
     conn.commit()
     cursor.close()
+    conn.close()
     
     if os.name == "nt":
         image_path = f"assets\\puffs\\{image_path}"
@@ -136,10 +138,38 @@ async def stats(interaction: discord.Interaction):
     username, rolls, rare = choice
     
     cursor.close()
+    conn.close()
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
     embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a 5 star **{rare}** times!", inline=False)
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="chances", description="Displays the chances for each puff")
+async def chances(interaction: discord.Interaction):
+    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
+    
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT SUM(weight) FROM puffs")
+    total_weight = cursor.fetchone()[0]
+    
+    if total_weight is None or total_weight == 0: await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
+    
+    cursor.execute("SELECT name, weight FROm puffs ORDER by weight ASC")
+    items = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    
+    embed = discord.Embed(title="Puff Weights", color=discord.Color.blurple())
+    
+    for name, weight in items:
+        chance = round((weight/total_weight)*100, 2)
+        embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
+    
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
