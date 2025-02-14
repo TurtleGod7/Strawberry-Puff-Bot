@@ -103,27 +103,35 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0: 
-        cursor.execute("INSERT INTO stats (username, rolls, rare) VALUES (?,?,?)", (user_id, 0, 0))
+        cursor.execute("INSERT INTO stats (username, rolls, gold, purple) VALUES (?,?,?,?)", (user_id, 0, 0, 0))
     
     cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
     
+    if int(isRare) == 2:
+        cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
     if int(isRare) == 1:
-        cursor.execute("UPDATE stats SET rare = rare + 1 WHERE username = ?", (user_id,))
+        cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
     
     conn.commit()
     cursor.close()
     conn.close()
-    # f"https://raw.githubusercontent.com/TurtleGod7/Strawberry-Puff-Bot/refs/heads/main/assets/puffs/{image_path}"
-    if os.name == "nt":
-        image_path = f"assets\\puffs\\{image_path}"
-    else:
-        image_path = f"assets/puffs/{image_path}"
-    img = discord.File(image_path, filename=image_path)
     
-    await interaction.response.send_message(
-        f"You got a {name}.\nIt is {description}\nIt was a {chance}% chance to roll this puff!\n",
-        file=img
+    rareColors = {
+        0 : discord.Color.blue(),
+        1 : discord.Color.purple(),
+        2 : discord.Color.gold()
+    }
+    
+    image_path = f"https://raw.githubusercontent.com/TurtleGod7/Strawberry-Puff-Bot/refs/heads/main/assets/puffs/{image_path}?=raw"
+    
+    embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
+    embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+                    value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
     )
+    embed.set_image(url=image_path)
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def stats(interaction: discord.Interaction):
@@ -135,14 +143,14 @@ async def stats(interaction: discord.Interaction):
     
     cursor.execute("SELECT * FROM stats WHERE username = ?", (user_id,))
     choice = cursor.fetchone()
-    username, rolls, rare = choice
+    username, rolls, gold, purple = choice
     
     cursor.close()
     conn.close()
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
-    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a 5 star **{rare}** times!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a gold rarity puff **{gold}** times and a purple rarity puff **{purple}** times!", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
@@ -156,7 +164,7 @@ class DropRatesView(discord.ui.View):
         self.items_per_page = 5  # Adjust if needed
 
     def generate_embed(self):
-        embed = discord.Embed(title="📊 Item Drop Rates", color=discord.Color.gold())
+        embed = discord.Embed(title="📊 Puff Drop Rates", color=discord.Color.gold())
         
         start = self.page * self.items_per_page
         end = start + self.items_per_page
@@ -164,8 +172,9 @@ class DropRatesView(discord.ui.View):
 
         for name, weight, isRare in page_items:
             chance = round(round((weight / self.total_weight), 4) * 100, 2)  # Convert to percentage
-            if isRare == 1: embed.add_field(name=name+":star:", value=f"{chance:.2f}%", inline=False)
-            else: embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
+            if isRare == 2: embed.add_field(name=name+" :yellow_square:", value=f"{chance:.2f}%", inline=False)
+            elif isRare == 1: embed.add_field(name=name+" :purple_square:", value=f"{chance:.2f}%", inline=False)
+            else: embed.add_field(name=name+" :blue_square:", value=f"{chance:.2f}%", inline=False)
             
 
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items) // self.items_per_page + 1}")
@@ -203,13 +212,19 @@ async def drop_rates(interaction: discord.Interaction):
     view = DropRatesView(items, total_weight)
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
+@bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
+async def stats(interaction: discord.Interaction):
+    embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
+    embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help")
 async def help(interaction: discord.Interaction):
-    embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.blurple())
-    embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
+    embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
+    embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.")
     embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
-    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.")
+    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.", inline=False)
+    embed.add_field(name="/suggestions", value="Use this function to give us any suggestions")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
