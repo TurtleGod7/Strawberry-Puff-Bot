@@ -113,7 +113,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     conn.commit()
     cursor.close()
     conn.close()
-    
+    # f"https://raw.githubusercontent.com/TurtleGod7/Strawberry-Puff-Bot/refs/heads/main/assets/puffs/{image_path}"
     if os.name == "nt":
         image_path = f"assets\\puffs\\{image_path}"
     else:
@@ -147,42 +147,69 @@ async def stats(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
+class DropRatesView(discord.ui.View):
+    def __init__(self, items, total_weight):
+        super().__init__(timeout=60)  # Buttons expire after 60 seconds
+        self.items = items
+        self.total_weight = total_weight
+        self.page = 0
+        self.items_per_page = 5  # Adjust if needed
+
+    def generate_embed(self):
+        embed = discord.Embed(title="📊 Item Drop Rates", color=discord.Color.gold())
+        
+        start = self.page * self.items_per_page
+        end = start + self.items_per_page
+        page_items = self.items[start:end]
+
+        for name, weight, isRare in page_items:
+            chance = round(round((weight / self.total_weight), 4) * 100, 2)  # Convert to percentage
+            if isRare == 1: embed.add_field(name=name+":star:", value=f"{chance:.2f}%", inline=False)
+            else: embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
+            
+
+        embed.set_footer(text=f"Page {self.page + 1} / {len(self.items) // self.items_per_page + 1}")
+        return embed
+
+    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="➡️ Next", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if (self.page + 1) * self.items_per_page < len(self.items):
+            self.page += 1
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
-async def chances(interaction: discord.Interaction):
-    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
-    
+async def drop_rates(interaction: discord.Interaction):
+    db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT SUM(weight) FROM puffs")
     total_weight = cursor.fetchone()[0]
-    
+
     if total_weight is None or total_weight == 0: await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
-    
-    cursor.execute("SELECT name, weight, isRare FROM puffs ORDER by weight ASC")
+
+    cursor.execute("SELECT name, weight, isRare FROM puffs ORDER BY weight ASC")
     items = cursor.fetchall()
-    
+
     cursor.close()
     conn.close()
-    
-    embed = discord.Embed(title="Puff Weights", color=discord.Color.blurple())
-    
-    for name, weight, isRare in items:
-        chance = round((weight/total_weight)*100, 2)
-        if isRare == 1:
-            embed.add_field(name=name+":star:", value=f"{chance:.2f}%", inline=False)
-        else:
-            embed.add_field(name=name, value=f"{chance:.2f}%", inline=False)
-    
-    embed.set_footer(text=f"Star indicates a 5 star\nRequested by {interaction.user.display_name}")
-    
-    await interaction.response.send_message(embed=embed)
+
+    view = DropRatesView(items, total_weight)
+    await interaction.response.send_message(embed=view.generate_embed(), view=view)
+
 
 @bot.tree.command(name="help")
 async def help(interaction: discord.Interaction):
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.blurple())
-    embed.add_field(name="\\puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
-    embed.add_field(name="\\statistics", value="This is the statistics function so you can understand more about your luck.")
-    embed.add_field(name="\\chances", value="This is the chances function that displays information for each puff.")
+    embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.", inline=False)
+    embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
+    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
