@@ -68,30 +68,51 @@ async def on_ready():
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
 async def Roll_a_puff(interaction: discord.Interaction):
+    user_id = interaction.user.id
+
+    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT pity FROM pity WHERE username = ?", (user_id,))
+    pityinfo = cursor.fetchone()
+
+    if pityinfo is None:  # If user is not in the database
+        pity = 0
+        cursor.execute("INSERT INTO pity (username, pity) VALUES (?, ?)", (user_id, 0))
+        conn.commit()
+    else:
+        pity = pityinfo[0]  # Extract pity value
+    
+    cursor.close()
+    conn.close()
     
     conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
 
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM puffs")
-    rows = cursor.fetchall()
-    # Checks if rows exist
-    if rows:
+    
+    if int(pity) < 100:
+        cursor.execute("SELECT * FROM puffs")
+        rows = cursor.fetchall()
         cursor.execute("SELECT id, weight FROM puffs")
         data =  cursor.fetchall()
         items, weights = zip(*data) # Randomly selects a weighted role (id)
         selected_id = random.choices(items, weights=weights, k=1)[0]
-
         cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
-        choice = cursor.fetchone() # Gets the full info from the id
-        
+        choice = cursor.fetchone() # Gets the full info from the id 
         cursor.execute("SELECT SUM(weight) FROM puffs")
         total_weight = cursor.fetchone()[0]
         cursor.close() # Gets info for the chance calculation
         conn.close()
+        item_id, name, description, image_path, weights, isRare = choice
     else:
-        await interaction.response.send_message("There's been an issue, please contact the developer for more assistance")
-    
-    item_id, name, description, image_path, weights, isRare = choice
+        cursor.execute("SELECT * FROM puffs WHERE isRare = 2")
+        rows = cursor.fetchall()
+        choice = random.choice(rows)
+        total_weight = len(rows)
+        weights = 1
+        cursor.close()
+        conn.close()
     
     chance = round(round(weights/int(total_weight), 4)*100,2)
     
@@ -99,7 +120,6 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     cursor = conn.cursor()
     
-    user_id = interaction.user.id
     
     cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0: 
@@ -111,6 +131,11 @@ async def Roll_a_puff(interaction: discord.Interaction):
         cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
     if int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
+    
+    cursor.execute("UPDATE pity SET pity = pity + 1 WHERE username = ?", (user_id,))
+
+    if pity >= 100:
+        cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
     
     conn.commit()
     cursor.close()
@@ -125,9 +150,14 @@ async def Roll_a_puff(interaction: discord.Interaction):
     image_path = f"https://raw.githubusercontent.com/TurtleGod7/Strawberry-Puff-Bot/refs/heads/main/assets/puffs/{image_path}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
-    embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+    if isRare == 2:
+        embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+                    value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\n"
+        )
+    else:
+        embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
                     value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
-    )
+        )
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -223,7 +253,7 @@ async def help(interaction: discord.Interaction):
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
     embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.")
     embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
-    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.", inline=False)
+    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.")
     embed.add_field(name="/suggestions", value="Use this function to give us any suggestions")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
