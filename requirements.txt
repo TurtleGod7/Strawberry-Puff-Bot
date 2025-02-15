@@ -6,3 +6,4 @@ random
 discord-py
 python-dotenv
 Flask==3.1.0
+lts-audioop
