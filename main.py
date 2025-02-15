@@ -13,6 +13,15 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 # Initialize Flask and the bot
 app = Flask(__name__)
 
+## Control variables
+pity_limit = 100
+git_username = "TurtleGod7"
+git_repo = "Strawberry-Puff-Bot"
+'''
+Gold Rarity puffs: <1%
+Purple rarity puffs: 1%<=x<=10%
+Blue rarity puffs: everything else
+'''
 # Define a simple route for UptimeRobot
 @app.route('/')
 def index():
@@ -91,29 +100,33 @@ async def Roll_a_puff(interaction: discord.Interaction):
 
     cursor = conn.cursor()
     
-    if int(pity) < 100:
-        cursor.execute("SELECT * FROM puffs")
-        rows = cursor.fetchall()
+    if int(pity) < pity_limit:
         cursor.execute("SELECT id, weight FROM puffs")
         data =  cursor.fetchall()
         items, weights = zip(*data) # Randomly selects a weighted role (id)
         selected_id = random.choices(items, weights=weights, k=1)[0]
         cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
         choice = cursor.fetchone() # Gets the full info from the id 
+        
         cursor.execute("SELECT SUM(weight) FROM puffs")
         total_weight = cursor.fetchone()[0]
+        
         cursor.close() # Gets info for the chance calculation
         conn.close()
+        
         item_id, name, description, image_path, weights, isRare = choice
 
     else:
         cursor.execute("SELECT * FROM puffs WHERE isRare = 2")
         rows = cursor.fetchall()
         choice = random.choice(rows)
+        
         total_weight = len(rows)
         weights = 1
+        
         cursor.close()
         conn.close()
+        
         item_id, name, description, image_path, notneededweight, isRare = choice
     
     chance = round(round(weights/int(total_weight), 4)*100,2)
@@ -149,16 +162,27 @@ async def Roll_a_puff(interaction: discord.Interaction):
         2 : discord.Color.gold()
     }
     
-    image_path = f"https://raw.githubusercontent.com/TurtleGod7/Strawberry-Puff-Bot/refs/heads/main/assets/puffs/{image_path}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{image_path}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare == 2:
-        embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-                    value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\n"
+        embed.add_field(
+            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+            value=f"""
+            You got a **{name}**.\n
+            It is {description}\n
+            It was a **{chance}%** chance to roll this puff!\n
+            You rolled this puff at **{pity}** pity.\n
+            """
         )
     else:
-        embed.add_field(name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-                    value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
+        embed.add_field(
+            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+            value=f"""
+            You got a **{name}**.\n
+            It is {description}\n
+            It was a **{chance}%** chance to roll this puff!\n
+            """
         )
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
