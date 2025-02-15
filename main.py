@@ -105,6 +105,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         cursor.close() # Gets info for the chance calculation
         conn.close()
         item_id, name, description, image_path, weights, isRare = choice
+
     else:
         cursor.execute("SELECT * FROM puffs WHERE isRare = 2")
         rows = cursor.fetchall()
@@ -113,6 +114,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         weights = 1
         cursor.close()
         conn.close()
+        item_id, name, description, image_path, notneededweight, isRare = choice
     
     chance = round(round(weights/int(total_weight), 4)*100,2)
     
@@ -134,7 +136,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     cursor.execute("UPDATE pity SET pity = pity + 1 WHERE username = ?", (user_id,))
 
-    if pity >= 100:
+    if isRare == 2:
         cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
     
     conn.commit()
