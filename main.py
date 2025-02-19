@@ -14,7 +14,7 @@ git_username = "TurtleGod7"
 git_repo = "Strawberry-Puff-Bot"
 button_page_expiry = 60
 items_per_page = 5
-eidolon_max = 6
+eidolon_max = 10
 ###
 
 '''
@@ -67,6 +67,10 @@ async def on_ready():
         isRare NUMERIC NOT NULL DEFAULT 0
     )
     """)
+    
+    cursor.execute("PRAGMA journal_mode=WAL")
+    
+    conn.commit
     cursor.close
     conn.close
     
@@ -90,6 +94,10 @@ async def on_ready():
         "pity" INTEGER NOT NULL DEFAULT 0
     )               
     """)
+    
+    cursor.execute("PRAGMA journal_mode=WAL")
+    
+    conn.commit
     cursor.close()
     conn.close()
     
@@ -99,7 +107,7 @@ async def on_ready():
 async def Roll_a_puff(interaction: discord.Interaction):
     user_id = interaction.user.id
 
-    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
 
     cursor = conn.cursor()
     
@@ -116,7 +124,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     cursor.close()
     conn.close()
     
-    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
+    conn = sqlite3.connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/puffs.db", check_same_thread=False)
 
     cursor = conn.cursor()
     
@@ -151,7 +159,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     
     chance = round(round(weights/int(total_weight), 4)*100,2)
     
-    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
     
@@ -171,6 +179,8 @@ async def Roll_a_puff(interaction: discord.Interaction):
         eidolon = frequency.get(name, -1)
         if eidolon < eidolon_max:
             frequency[name] = eidolon+1
+    
+    frequency = dict(sorted(frequency.items()))
     
     cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
     
@@ -216,7 +226,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def statistics(interaction: discord.Interaction):
-    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
     
@@ -244,11 +254,11 @@ async def statistics(interaction: discord.Interaction):
     for k, v in frequency.items():
         ascenscions_description_string += f"* *{k}*  **{v}** time(s)\n"
     if ascenscions_description_string == "":
-        ascenscions_description_string += "You're seeing this because you didn't pull any gold rarity puffs :sob:"
+        ascenscions_description_string += "You're seeing this because you didn't roll any gold rarity puffs :sob:"
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
-    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a gold rarity puff **{gold}** times and a purple rarity puff **{purple}** times!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a gold rarity puff **{gold}** time(s) and a purple rarity puff **{purple}** time(s)!", inline=False)
     embed.add_field(name="Ascensions", value=ascenscions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -294,7 +304,7 @@ class DropRatesView(discord.ui.View):
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
 async def drop_rates(interaction: discord.Interaction):
     db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
 
     cursor.execute("SELECT SUM(weight) FROM puffs")
@@ -338,7 +348,12 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="How is information saved?",
-        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specifc (AKA Discord-wide)\nThis means that lets say you roll a puff in another server, this will affect your experience in this server", 
+        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specifc (AKA Discord-wide)\n\nThis means that lets say you roll a puff in another server, this will affect your experience in this server", 
+        inline=False
+    )
+    embed.add_field(
+        name="Pity system",
+        value="When you reach **100** pity, you will roll only a gold rarity puff (check /chances for what they are). Although, this is a weighted roll, so that means that the more common gold rarity puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold rarity puff, it is not public in the /statistics function",
         inline=False
     )
     
