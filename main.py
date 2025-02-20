@@ -14,7 +14,9 @@ git_username = "TurtleGod7"
 git_repo = "Strawberry-Puff-Bot"
 button_page_expiry = 60
 items_per_page = 5
-eidolon_max = 10
+ascension_max = 10
+avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
+banner_path = "assets\\banner.gif" if os.name == "nt" else "assets/banner.gif"
 ###
 
 '''
@@ -51,7 +53,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    # Hope that this code doesn't run since I've changed the columns already
     
     conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
     
@@ -100,6 +101,22 @@ async def on_ready():
     conn.commit
     cursor.close()
     conn.close()
+    
+    
+    if not os.path.exists(avatar_path):
+        print("avatar .gif isn't found")
+    else:
+        with open(avatar_path, "rb") as f:
+            avatar_img = f.read()
+            await bot.user.edit(avatar=avatar_img) # type: ignore
+    
+    if not os.path.exists(banner_path):
+        print("banner .gif isn't found")
+    else:
+        with open(banner_path, "rb") as f:
+            banner_img = f.read()
+            await bot.user.edit(banner=banner_img) # type: ignore
+        
     
     print(f'Logged in as {bot.user}')    
 
@@ -176,9 +193,9 @@ async def Roll_a_puff(interaction: discord.Interaction):
             frequency[split.split("_")[0]] = int(split.split("_")[1])
     
     if isRare == 2:
-        eidolon = frequency.get(name, -1)
-        if eidolon < eidolon_max:
-            frequency[name] = eidolon+1
+        ascension = frequency.get(name, -1)
+        if ascension < ascension_max:
+            frequency[name] = ascension+1
     
     frequency = dict(sorted(frequency.items()))
     
@@ -334,6 +351,7 @@ async def help(interaction: discord.Interaction):
     embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
     embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.")
     embed.add_field(name="/suggestions", value="Use this function to give us any suggestions")
+    embed.add_field(name="/info", value="Function that provides valuable details and information about how this bot works")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
@@ -353,7 +371,12 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Pity system",
-        value="When you reach **100** pity, you will roll only a gold rarity puff (check /chances for what they are). Although, this is a weighted roll, so that means that the more common gold rarity puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold rarity puff, it is not public in the /statistics function",
+        value=f"When you reach **{pity_limit}** pity, you will roll only a gold rarity puff (check /chances for what they are). Although, this is a weighted roll, so that means that the more common gold rarity puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold rarity puff, it is not public in the /statistics function",
+        inline=False
+    )
+    embed.add_field(
+        name="Ascensions",
+        value=f"These work exactly like eidolons/constelations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ascension_max}** ascension. Please check /statistics for what you've ascended",
         inline=False
     )
     
