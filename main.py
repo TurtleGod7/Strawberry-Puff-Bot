@@ -129,14 +129,14 @@ async def Roll_a_puff(interaction: discord.Interaction):
     cursor = conn.cursor()
     
     cursor.execute("SELECT pity FROM pity WHERE username = ?", (user_id,))
-    pityinfo = cursor.fetchone()
+    pityInfo = cursor.fetchone()
 
-    if pityinfo is None:  # If user is not in the database
+    if pityInfo is None:  # If user is not in the database
         pity = 0
         cursor.execute("INSERT INTO pity (username, pity) VALUES (?, ?)", (user_id, 0))
         conn.commit()
     else:
-        pity = pityinfo[0]  # Extract pity value
+        pity = pityInfo[0]  # Extract pity value
     
     cursor.close()
     conn.close()
@@ -267,16 +267,16 @@ async def statistics(interaction: discord.Interaction):
         for split in split_by_puffs:
             frequency[split.split("_")[0]] = int(split.split("_")[1])
     
-    ascenscions_description_string = ""
+    ascensions_description_string = ""
     for k, v in frequency.items():
-        ascenscions_description_string += f"* *{k}*  **{v}** time(s)\n"
-    if ascenscions_description_string == "":
-        ascenscions_description_string += "You're seeing this because you didn't roll any gold rarity puffs :sob:"
+        ascensions_description_string += f"* *{k}*  **{v}** time(s)\n"
+    if ascensions_description_string == "":
+        ascensions_description_string += "You're seeing this because you didn't roll any gold rarity puffs :sob:"
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
     embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a gold rarity puff **{gold}** time(s) and a purple rarity puff **{purple}** time(s)!", inline=False)
-    embed.add_field(name="Ascensions", value=ascenscions_description_string, inline=False)
+    embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
@@ -361,12 +361,12 @@ async def information(interaction: discord.Interaction):
     embed = discord.Embed(title="Good to know information", color=discord.Color.dark_orange())
     embed.add_field(
         name="Rarities", 
-        value="1. :yellow_square: is a gold rarity puff (the highest rarity available)\u200b\n2. :purple_square: is a purple rarity puff that is the second rarest puff to get\u200b\n3. Finally a :blue_square: is a blue rarity puff that is the most common type to get\nPlease check the /chances function to see what they corrolate to", 
+        value="1. :yellow_square: is a gold rarity puff (the highest rarity available)\u200b\n2. :purple_square: is a purple rarity puff that is the second rarest puff to get\u200b\n3. Finally a :blue_square: is a blue rarity puff that is the most common type to get\nPlease check the /chances function to see what they correlate to", 
         inline=False
     )
     embed.add_field(
         name="How is information saved?",
-        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specifc (AKA Discord-wide)\n\nThis means that lets say you roll a puff in another server, this will affect your experience in this server", 
+        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specific (AKA Discord-wide)\n\nThis means that lets say you roll a puff in another server, this will affect your experience in this server", 
         inline=False
     )
     embed.add_field(
@@ -376,7 +376,7 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Ascensions",
-        value=f"These work exactly like eidolons/constelations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ascension_max}** ascension. Please check /statistics for what you've ascended",
+        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ascension_max}** ascension. Please check /statistics for what you've ascended",
         inline=False
     )
     
