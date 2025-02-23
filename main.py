@@ -22,9 +22,9 @@ settings_expiry = 60
 ascension_max = 10
 avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
 banner_path = "assets\\profile\\banner.gif" if os.name == "nt" else "assets/profile/banner.gif"
-rarityWeights = [.887, .083, .003]
-limitedWeights = [.9, .1]
-weightsMultipier = {
+rarityWeights = [.887, .083, .03]
+limitedWeights = [.75, .25]
+weightsMultipier = { # Not to be manipulated, just needs to be global
         0 : rarityWeights[0],
         1 : rarityWeights[1],
         2 : rarityWeights[2]*limitedWeights[0],
@@ -33,12 +33,6 @@ weightsMultipier = {
         5 : limitedWeights[1], 
 }
 ###
-
-'''
-Gold Rarity puffs: <1%
-Purple rarity puffs: 1%<=x<=10%
-Blue rarity puffs: everything else
-'''
 
 '''
 from flask import Flask
@@ -176,12 +170,12 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     cursor.execute("SELECT pity FROM pity WHERE username = ?", (user_id,))
     pityInfo = cursor.fetchone()
 
-    if pityInfo is None:  # If user is not in the database
+    if pityInfo is None:
         pity = 0
         cursor.execute("INSERT INTO pity (username, pity) VALUES (?, ?)", (user_id, 0))
         conn.commit()
     else:
-        pity = pityInfo[0]  # Extract pity value
+        pity = pityInfo[0]
     
     cursor.close()
     conn.close()
@@ -448,7 +442,7 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Gacha system",
-        value=f"This system works by initially rolling for the rarity at weights of 3%, 8.3%, and 88.7% from least common to common rarities. Then if you roll in the 3%, there is another roll to decide if you will get a limited which is at 10%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
+        value=f"This system works by initially rolling for the rarity at weights of **{rarityWeights[2]*100}**%, **{rarityWeights[1]*100}**%, and **{rarityWeights[0]*100}**% from least common to common rarities. Then if you roll in the {rarityWeights[2]*100}%, there is another roll to decide if you will get a limited which is at **{limitedWeights[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
         inline=False
     )
     embed.add_field(
