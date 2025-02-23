@@ -6,12 +6,14 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from random import choices
 import sqlite3
+
+from pyparsing import col
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 ### Control variables
-pity_limit = 100
+pity_limit = 200
 git_username = "TurtleGod7"
 git_repo = "Strawberry-Puff-Bot"
 button_page_expiry = 60
@@ -19,15 +21,15 @@ items_per_page = 5
 settings_expiry = 60
 ascension_max = 10
 avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
-banner_path = "assets\\banner.gif" if os.name == "nt" else "assets/banner.gif"
-rarityWeights = [.887,.083,.003]
-limitedWeights = [.9,.1]
+banner_path = "assets\\profile\\banner.gif" if os.name == "nt" else "assets/profile/banner.gif"
+rarityWeights = [.887, .083, .003]
+limitedWeights = [.9, .1]
 weightsMultipier = {
         0 : rarityWeights[0],
         1 : rarityWeights[1],
         2 : rarityWeights[2]*limitedWeights[0],
         3 : rarityWeights[2]*limitedWeights[1],
-        4 : limitedWeights[0],
+        4 : limitedWeights[0], # When pity hits 100
         5 : limitedWeights[1], 
 }
 ###
@@ -63,7 +65,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-async def dm_ping(user_id: int, message: str):
+async def dm_ping(user_id: int, message: str) -> None:
     try:
         user = await bot.fetch_user(user_id)
     except Exception as e:
@@ -81,7 +83,7 @@ async def dm_ping(user_id: int, message: str):
         print(f'Error sending DM as {e}')
 
 @bot.event
-async def on_ready():
+async def on_ready() -> None:
     await bot.tree.sync()
     
     conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
@@ -164,7 +166,7 @@ async def on_ready():
     print(f'Logged in as {bot.user}')    
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
-async def Roll_a_puff(interaction: discord.Interaction):
+async def Roll_a_puff(interaction: discord.Interaction) -> None:
     user_id = interaction.user.id
 
     conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
@@ -306,7 +308,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
-async def statistics(interaction: discord.Interaction):
+async def statistics(interaction: discord.Interaction) -> None:
     conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
@@ -339,7 +341,7 @@ async def statistics(interaction: discord.Interaction):
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
-    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {"time" if limited == 1 else "times"}, a gold rarity puff **{gold}** {"time" if gold == 1 else "times"}, and a purple rarity puff **{"time" if purple == 1 else "times"}**!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {"time" if limited == 1 else "times"}, a gold rarity puff **{gold}** {"time" if gold == 1 else "times"}, and a purple rarity puff **{purple}** {"time" if purple == 1 else "times"}!", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -389,7 +391,7 @@ class DropRatesView(discord.ui.View):
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
-async def drop_rates(interaction: discord.Interaction):
+async def drop_rates(interaction: discord.Interaction) -> None:
     db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
     conn = sqlite3.connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
@@ -413,13 +415,13 @@ async def drop_rates(interaction: discord.Interaction):
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
 @bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
-async def stats(interaction: discord.Interaction):
+async def stats(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
-async def help(interaction: discord.Interaction):
+async def help(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
     embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.")
     embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
@@ -503,7 +505,7 @@ class SettingsView(discord.ui.View):
         self.stop()
 
 @bot.tree.command(name="settings", description="Just set up your settings")
-async def settings(interaction: discord.Interaction):
+async def settings(interaction: discord.Interaction) -> None:
     user_id = interaction.user.id
     
     db_path = "assets\\database\\users.db" if os.name == "nt" else "assets/database/users.db"
@@ -519,6 +521,13 @@ async def settings(interaction: discord.Interaction):
     conn.close()
 
     await interaction.response.send_message("Choose an option below:", view=SettingsView(user_id), ephemeral=True)
+
+@bot.tree.command(name="banner", description="Show the current limited puff banner")
+async def showBanner(interaction: discord.Interaction):
+    embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
+    embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/banner.gif?=raw")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 bot.run(TOKEN) # type: ignore
 
