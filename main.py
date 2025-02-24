@@ -23,7 +23,7 @@ ascension_max = 10
 avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
 banner_path = "assets\\profile\\banner.gif" if os.name == "nt" else "assets/profile/banner.gif"
 rarityWeights = [.887, .083, .03]
-limitedWeights = [.75, .25]
+limitedWeights = [.8, .2]
 weightsMultipier = { # Not to be manipulated, just needs to be global
         0 : rarityWeights[0],
         1 : rarityWeights[1],
@@ -33,7 +33,7 @@ weightsMultipier = { # Not to be manipulated, just needs to be global
         5 : limitedWeights[1], 
 }
 ###
-
+# Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 '''
 from flask import Flask
 import threading
@@ -147,15 +147,20 @@ async def on_ready() -> None:
     else:
         with open(avatar_path, "rb") as f:
             avatar_img = f.read()
-            await bot.user.edit(avatar=avatar_img) # type: ignore
+            try:
+                await bot.user.edit(avatar=avatar_img) # type: ignore
+            except Exception as e:
+                print(f'{e}')
     
     if not os.path.exists(banner_path):
         print("banner .gif isn't found")
     else:
         with open(banner_path, "rb") as f:
             banner_img = f.read()
-            await bot.user.edit(banner=banner_img) # type: ignore
-        
+            try:
+                await bot.user.edit(banner=banner_img) # type: ignore
+            except Exception as e:
+                print(f'{e}')
     
     print(f'Logged in as {bot.user}')    
 
@@ -239,7 +244,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0: 
-        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds) VALUES (?,?,?,?,?,?)", (user_id, 0, 0, 0, 0,""))
+        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds) VALUES (?,?,?,?,?,?)", (user_id, 0, 0, 0, 0,None))
     
     cursor.execute("SELECT rolledGolds FROM stats WHERE username = ?", (user_id,))
     rolledGolds = cursor.fetchone()[0]
@@ -282,14 +287,17 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
         2 : discord.Color.gold(),
         3 : discord.Color.greyple()
     }
-    
+    numsuffix = {
+        1 : "st",
+        2 : "nd"
+    }
     image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{image_path}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
         embed.add_field(
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\n"
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {"is your first time getting this puff!" if frequency["name"] == 0 else f"is your **{frequency["name"]}**{numsuffix.get(frequency["name"], "th")} ascension"}"
         )
     else:
         embed.add_field(
