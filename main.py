@@ -1,13 +1,10 @@
-from cProfile import label
 import os
-from tkinter.tix import Select
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from random import choices
 import sqlite3
-
-from pyparsing import col
+from statistics import mean
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -75,6 +72,20 @@ async def dm_ping(user_id: int, message: str) -> None:
         print(f"Can't DM {user}; {user_id}")
     except discord.HTTPException as e:
         print(f'Error sending DM as {e}')
+
+def unpack_rolled_info(rollInfo: str):
+    if rollInfo == None:
+        return
+    
+    frequency = {}
+    split_by_puffs = rollInfo.split(";")
+    for split in split_by_puffs:
+        frequency[split.split("_")[0]] = int(split.split("_")[1])
+    
+    return dict(sorted(frequency.items()))
+
+def pack_rolled_info(frequencyDict: dict):
+    return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
 
 @bot.event
 async def on_ready() -> None:
@@ -248,11 +259,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     cursor.execute("SELECT rolledGolds FROM stats WHERE username = ?", (user_id,))
     rolledGolds = cursor.fetchone()[0]
-    frequency = {}
-    if None != rolledGolds:
-        split_by_puffs = rolledGolds.split(";")
-        for split in split_by_puffs:
-            frequency[split.split("_")[0]] = int(split.split("_")[1])
+    frequency = unpack_rolled_info(rolledGolds)
     
     if isRare >= 2:
         ascension = frequency.get(name, -1)
@@ -272,10 +279,10 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     cursor.execute("UPDATE pity SET pity = pity + 1 WHERE username = ?", (user_id,))
 
-    if isRare == 2:
+    if isRare >= 2:
         cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
     
-    cursor.execute("UPDATE stats SET rolledGolds = ? WHERE username = ?", (";".join([f"{k}_{v}" for k, v in frequency.items()]) or None, user_id))
+    cursor.execute("UPDATE stats SET rolledGolds = ? WHERE username = ?", (pack_rolled_info(frequency), user_id))
     
     conn.commit()
     cursor.close()
@@ -297,7 +304,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     if isRare >= 2:
         embed.add_field(
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {"is your first time getting this puff!" if frequency["name"] == 0 else f"is your **{frequency["name"]}**{numsuffix.get(frequency["name"], "th")} ascension"}"
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {"is your first time getting this puff!" if frequency[name] == 0 else f"is your **{frequency[name]}**{numsuffix.get(frequency[name], "th")} ascension"}"
         )
     else:
         embed.add_field(
@@ -417,7 +424,7 @@ async def drop_rates(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
 @bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
-async def stats(interaction: discord.Interaction) -> None:
+async def suggestions(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -531,5 +538,92 @@ async def showBanner(interaction: discord.Interaction):
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
+@bot.command()
+async def pring(ctx, *, arg):
+    await ctx.send(arg)
+
+@bot.tree.command(name="compare", description="Compare your rolls to other people!")
+async def comparision(interaction: discord.Interaction, user: discord.Member):
+    client_user_id = interaction.user.id
+    target_user_id = user.id
+    
+    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
+    
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT * FROM stats WHERE username = ?", (client_user_id,))
+        clientChoice = cursor.fetchone()
+    except:
+        await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
+        return
+    
+    try:
+        cursor.execute("SELECT * FROM stats WHERE username = ?", (target_user_id,))
+        targetChoice = cursor.fetchone()
+    except:
+        await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
+        return
+    
+    cursor.close()
+    conn.close()
+    
+    clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled = clientChoice
+    targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled = targetChoice
+    
+    if clientRolled == None:
+        await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
+        return
+    if targetRolled == None:
+        await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
+        return
+    
+    # unpacking information
+    clientFrequency = unpack_rolled_info(clientRolled)
+    targetFrequency = unpack_rolled_info(targetRolled)
+    
+    diffRolls = targetRolls-clientRolls# Doing differences calculations
+    diffLimited = clientLimited-targetLimited
+    diffGold = clientGold-targetGold
+    diffpurple = clientPurple-targetPurple
+    diffPuffs = []# Same formatting as saving info to db
+    common_keys = set(clientFrequency).intersection(targetFrequency)
+    for key in sorted(common_keys):
+        diffPuffs.append(f"{key}_{clientFrequency[key] - targetFrequency[key]}")
+    client_dif_keys = common_keys - clientFrequency.keys()
+    target_dif_keys = common_keys - targetFrequency.keys()
+    for key in sorted(client_dif_keys):
+        diffPuffs.append(f"{key}_{clientFrequency[key]}")
+    for key in sorted(target_dif_keys):
+        diffPuffs.append(f"{key}_{-targetFrequency[key]}")
+    
+    averageList = []
+    for i in range(len([diffRolls, diffLimited, diffGold, diffpurple])):
+        if i >= 0:
+            averageList.append(1)
+        else:
+            averageList.append(-1)
+    averageList.append(1 if mean([1 if int(v.split("_")[1]) > 0 else -1 for v in diffPuffs]) > 0 else -1) # type: ignore
+    #Gets average better or worse to get embed color
+    if mean(averageList) > 0:
+        color = discord.Color.brand_green()
+    else:
+        color = discord.Color.brand_red()
+    
+    diffPuffsdict = {}
+    for val in diffPuffs:
+        diffPuffsdict[val.split("_")[0]] = int(val.split("_")[1])
+    
+    embed = discord.Embed(title=f"Puff Comparison with {await bot.fetch_user(target_user_id)}", color=color)
+    embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {"more" if diffRolls < 0 else "less"} rolls than them", inline=False)
+    embed.add_field(name="Limiteds", value=f"You have {abs(diffLimited)} {"more" if diffLimited > 0 else "less"} limited puffs than them", inline=False)
+    embed.add_field(name="Golds", value=f"You have {abs(diffGold)} {"more" if diffGold > 0 else "less"} gold puffs than them", inline=False)
+    embed.add_field(name="Purples", value=f"You have {abs(diffpurple)} {"more" if diffpurple > 0 else "less"} purple puffs than them", inline=False)
+    embed.add_field(name="More Gold Info", value = "\n".join(f"* You have {v} more {k}s than them" if v >= 0 else f"* You have {abs(v)} less {k}s than them" for k, v in diffPuffsdict.items()), inline=False)
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
+
+
+# Add comparison fucniton; add pvp fucntion
 bot.run(TOKEN) # type: ignore
 
