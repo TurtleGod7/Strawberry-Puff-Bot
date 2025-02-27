@@ -73,14 +73,16 @@ async def dm_ping(user_id: int, message: str) -> None:
     except discord.HTTPException as e:
         print(f'Error sending DM as {e}')
 
-def unpack_rolled_info(rollInfo: str):
+def unpack_rolled_info(rollInfo: str, returndictempty=False):
+    if returndictempty and rollInfo == None:
+        return {}
     if rollInfo == None:
         return
     
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
-        frequency[split.split("_")[0]] = int(split.split("_")[1])
+        frequency[split.split("_")[0]] = int(split.split("_")[1])+1
     
     return dict(sorted(frequency.items()))
 
@@ -571,39 +573,31 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled = clientChoice
     targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled = targetChoice
     
-    if clientRolled == None:
-        await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
-        return
-    if targetRolled == None:
-        await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
-        return
-    
     # unpacking information
-    clientFrequency = unpack_rolled_info(clientRolled)
-    targetFrequency = unpack_rolled_info(targetRolled)
+    clientFrequency = unpack_rolled_info(clientRolled, True)
+    targetFrequency = unpack_rolled_info(targetRolled, True)
     
     diffRolls = targetRolls-clientRolls# Doing differences calculations
     diffLimited = clientLimited-targetLimited
     diffGold = clientGold-targetGold
     diffpurple = clientPurple-targetPurple
     diffPuffs = []# Same formatting as saving info to db
-    common_keys = set(clientFrequency).intersection(targetFrequency)
-    for key in sorted(common_keys):
-        diffPuffs.append(f"{key}_{clientFrequency[key] - targetFrequency[key]}")
-    client_dif_keys = common_keys - clientFrequency.keys()
-    target_dif_keys = common_keys - targetFrequency.keys()
-    for key in sorted(client_dif_keys):
-        diffPuffs.append(f"{key}_{clientFrequency[key]}")
-    for key in sorted(target_dif_keys):
-        diffPuffs.append(f"{key}_{-targetFrequency[key]}")
-    
+    common_keys = set(clientFrequency) & set(targetFrequency)
+    client_dif_keys = set(clientFrequency) - common_keys
+    target_dif_keys = set(targetFrequency) - common_keys
+
+    diffPuffs.extend(f"{key}_{clientFrequency[key] - targetFrequency[key]}" for key in sorted(common_keys))
+    diffPuffs.extend(f"{key}_{clientFrequency[key]}" for key in sorted(client_dif_keys))
+    diffPuffs.extend(f"{key}_{-targetFrequency[key]}" for key in sorted(target_dif_keys))
+        
     averageList = []
     for i in range(len([diffRolls, diffLimited, diffGold, diffpurple])):
         if i >= 0:
             averageList.append(1)
         else:
             averageList.append(-1)
-    averageList.append(1 if mean([1 if int(v.split("_")[1]) > 0 else -1 for v in diffPuffs]) > 0 else -1) # type: ignore
+    try: averageList.append(1 if mean([1 if int(v.split("_")[1]) > 0 else -1 for v in diffPuffs]) > 0 else -1)
+    except: averageList.append(0)
     #Gets average better or worse to get embed color
     if mean(averageList) > 0:
         color = discord.Color.brand_green()
@@ -624,6 +618,6 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message(embed=embed)
 
 
-# Add comparison fucniton; add pvp fucntion
+# add pvp fucntion
 bot.run(TOKEN) # type: ignore
 
