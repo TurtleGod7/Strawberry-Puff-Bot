@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from random import choices
-import sqlite3
+import sqlite3 # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
 load_dotenv()
 
@@ -104,7 +104,7 @@ async def on_ready() -> None:
         name TEXT NOT NULL,
         description TEXT NOT NULL,
         imagepath TEXT NOT NULL UNIQUE,
-        weight INTEGER,
+        weight REAL,
         isRare NUMERIC NOT NULL DEFAULT 0
     )
     """)
@@ -126,7 +126,8 @@ async def on_ready() -> None:
         "limited" INTEGER DEFAULT 0,
         "gold" rolls INTEGER DEFAULT 0,
         "purple" INTEGER DEFAULT 0,
-        "rolledGolds" TEXT
+        "rolledGolds" TEXT,
+        "avgPity" REAL DEFAULT 0
     )               
     """)
     
@@ -239,18 +240,17 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
         cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
         choice = cursor.fetchone() # Gets the full info from the id 
         
-        cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
+        cursor.execute("SELECT SUM(CAST(weight AS REAL)) FROM puffs WHERE isRare = ?", (isLimitedval,))
         total_weight = cursor.fetchone()[0]
         
         isRareval = isLimitedval+2
         
         cursor.close()
-        
         conn.close()
         
     item_id, name, description, image_path, weights, isRare = choice
     
-    chance = round(round((weights/int(total_weight))*weightsMultipier.get(isRareval), 4)*100,2)
+    chance = round(round((weights/total_weight)*weightsMultipier.get(isRareval), 4)*100,2)
     
     conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
     
@@ -258,7 +258,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0: 
-        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds) VALUES (?,?,?,?,?,?)", (user_id, 0, 0, 0, 0,None))
+        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds, avgPity) VALUES (?,?,?,?,?,?,?)", (user_id, 0, 0, 0, 0,None,0))
     
     cursor.execute("SELECT rolledGolds FROM stats WHERE username = ?", (user_id,))
     rolledGolds = cursor.fetchone()[0]
@@ -277,8 +277,14 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     if int(isRare) == 3:
         cursor.execute("UPDATE stats SET limited = limited + 1 WHERE username = ?", (user_id,))
+        cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
+        avgPity = cursor.fetchone()[0]
+        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
     if int(isRare) == 2:
         cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
+        cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
+        avgPity = cursor.fetchone()[0]
+        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
     if int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
     
@@ -341,10 +347,10 @@ async def statistics(interaction: discord.Interaction) -> None:
     choice = cursor.fetchone()
     
     if choice is None:
-        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds) VALUES (?, ?, ?, ?, ?)", (user_id, 0, 0, 0, 0,""))
+        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds, avgPity) VALUES (?, ?, ?, ?, ?, ?)", (user_id, 0, 0, 0, 0, None, 0))
         conn.commit()
     
-    username, rolls,limited, gold, purple, rolledGolds = choice
+    username, rolls,limited, gold, purple, rolledGolds, avgPity = choice
     
     cursor.close()
     conn.close()
@@ -364,6 +370,7 @@ async def statistics(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
     embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {"time" if limited == 1 else "times"}, a gold rarity puff **{gold}** {"time" if gold == 1 else "times"}, and a purple rarity puff **{purple}** {"time" if purple == 1 else "times"}!", inline=False)
+    embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{avgPity}**", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -427,7 +434,7 @@ async def drop_rates(interaction: discord.Interaction) -> None:
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = 3")
     total_weight3 = cursor.fetchone()[0]
 
-    cursor.execute("SELECT name, weight, isRare FROM puffs ORDER BY weight ASC")
+    cursor.execute("SELECT name, weight, isRare FROM puffs WHERE weight > 0 ORDER BY weight ASC")
     items = cursor.fetchall()
 
     cursor.close()
@@ -575,11 +582,11 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     cursor.close()
     conn.close()
     
-    try: clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled = clientChoice
+    try: clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled, clientavgPity = clientChoice
     except:
         await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
         return
-    try: targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled = targetChoice
+    try: targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled, targetavgPity = targetChoice
     except:
         await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
         return
@@ -589,6 +596,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     targetFrequency = unpack_rolled_info(targetRolled, True)
     
     diffRolls = targetRolls-clientRolls# Doing differences calculations
+    diffPity = targetavgPity-clientavgPity
     diffLimited = clientLimited-targetLimited
     diffGold = clientGold-targetGold
     diffpurple = clientPurple-targetPurple
@@ -602,7 +610,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     diffPuffs.extend(f"{key}_{-targetFrequency[key]}" for key in sorted(target_dif_keys))
         
     averageList = []
-    varList = [diffRolls, diffLimited, diffGold, diffpurple]
+    varList = [diffPity, diffRolls, diffLimited, diffGold, diffpurple]
     for i in range(len(varList)):
         if varList[i] >= 0:
             averageList.append(1)
@@ -619,17 +627,26 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     diffPuffsdict = {}
     for val in diffPuffs:
         diffPuffsdict[val.split("_")[0]] = int(val.split("_")[1])
-    diffPuffsdict[list(diffPuffsdict.keys())[0]] = -next(iter(diffPuffsdict.values()))# inverts the first value in the dict since it is calculated differently than the others
     
     embed = discord.Embed(title=f"Puff Comparison with {await bot.fetch_user(target_user_id)}", color=color)
     embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {"more" if diffRolls < 0 else "less"} rolls than them", inline=False)
+    embed.add_field(name="Average Pity", value=f"Your average pity is {round(abs(diffPity),2)} {"more" if diffPity < 0 else "less"} than them", inline=False)
     embed.add_field(name="Limiteds", value=f"You have {abs(diffLimited)} {"more" if diffLimited > 0 else "less"} limited puffs than them", inline=False)
     embed.add_field(name="Golds", value=f"You have {abs(diffGold)} {"more" if diffGold > 0 else "less"} gold puffs than them", inline=False)
     embed.add_field(name="Purples", value=f"You have {abs(diffpurple)} {"more" if diffpurple > 0 else "less"} purple puffs than them", inline=False)
-    embed.add_field(name="More Gold Info", value = "\n".join(f"* You have {v} more {k}s than them" if v >= 0 else f"* You have {abs(v)} less {k}s than them" for k, v in diffPuffsdict.items()), inline=False)
+    embed.add_field(name="More Gold/Limited Info", value = "\n".join(f"* You have {v} more {k}s than them" if v >= 0 else f"* You have {abs(v)} less {k}s than them" for k, v in diffPuffsdict.items()), inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name="github", description="Get the GitHub link for this bot")
+async def github(interaction: discord.Interaction) -> None:
+    embed = discord.Embed(title="Github", color=discord.Color.random())
+    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{git_username}/{git_repo}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.command()
+async def skater(ctx, *, arg):
+    await ctx.send(arg + " <:skater:1345246453911781437>")
 
 # add pvp fucntion
 bot.run(TOKEN) # type: ignore
