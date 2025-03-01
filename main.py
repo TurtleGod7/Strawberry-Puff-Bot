@@ -82,11 +82,12 @@ def unpack_rolled_info(rollInfo: str, returndictempty=False):
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
-        frequency[split.split("_")[0]] = int(split.split("_")[1])+1
+        frequency[split.split("_")[0]] = int(split.split("_")[1])
     
     return dict(sorted(frequency.items()))
 
-def pack_rolled_info(frequencyDict: dict):
+def pack_rolled_info(frequencyDict: dict) -> str | None:
+    if frequencyDict is None: return None
     return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
 
 @bot.event
@@ -153,7 +154,7 @@ async def on_ready() -> None:
     conn.close()
     
     for k in PeopletoDM:
-        await dm_ping(k[0],"you have set your settings to ping you when Strawberry Puff Bot goes online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
+        await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
     
     if not os.path.exists(avatar_path):
         print("avatar .gif isn't found")
@@ -264,11 +265,13 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     frequency = unpack_rolled_info(rolledGolds)
     
     if isRare >= 2:
+        if frequency == None: frequency = {}
         ascension = frequency.get(name, -1)
         if ascension < ascension_max:
             frequency[name] = ascension+1
+        frequency = dict(sorted(frequency.items()))
     
-    frequency = dict(sorted(frequency.items()))
+    
     
     cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
     
@@ -285,6 +288,12 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
         cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
     
     cursor.execute("UPDATE stats SET rolledGolds = ? WHERE username = ?", (pack_rolled_info(frequency), user_id))
+    
+    cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO settings (username, DMonStartup, PingonGold) VALUES (?, ?, ?)", (user_id, 0, 0)) 
+    cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
+    PingonGold = cursor.fetchone()[0]
     
     conn.commit()
     cursor.close()
@@ -308,6 +317,8 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
             value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {"is your first time getting this puff!" if frequency[name] == 0 else f"is your **{frequency[name]}**{numsuffix.get(frequency[name], "th")} ascension"}"
         )
+        if PingonGold is not None and PingonGold == 1:
+            await dm_ping(user_id,"you rolled a gold rarity puff! :yellow_square:\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n" if isRare == 2 else "you rolled a limited rarity puff! <:gray_square:1342727158673707018>\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
     else:
         embed.add_field(
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
@@ -445,7 +456,7 @@ async def help(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="info", description="Just some good to know information")
-async def information(interaction: discord.Interaction):
+async def information(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Good to know information", color=discord.Color.dark_orange())
     embed.add_field(
         name="Rarities", 
@@ -485,7 +496,8 @@ class SettingsView(discord.ui.View):
     @discord.ui.select(
         placeholder="Choose a setting...",
         options=[
-            discord.SelectOption(label="Notify you when the bot turns on", value="0", description="Enable or disable bot startup notifications.")
+            discord.SelectOption(label="Notify you when the bot turns on", value="0", description="Enable or disable bot startup notifications."),
+            discord.SelectOption(label="Notify you when you roll a Gold/Limited Rarity puff", value="1", description="Extremely useful when spamming")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -496,7 +508,8 @@ class SettingsView(discord.ui.View):
         cursor = conn.cursor()
 
         settingsDict = {
-            0: "DMonStartup"
+            0: "DMonStartup",
+            1: "PingonGold",
         }
         
         cursor.execute(f"SELECT {settingsDict.get(value)} FROM settings WHERE username = ?", (self.user_id,))
@@ -510,7 +523,7 @@ class SettingsView(discord.ui.View):
         cursor.close()
         conn.close()
 
-        await interaction.response.send_message(f"Your setting {settingsDict.get(value)} has been updated to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
+        await interaction.response.send_message(f"Your setting has been updated to {'Enabled' if new_value else 'Disabled'}.", ephemeral=True)
 
     async def on_timeout(self):
         self.stop()
@@ -525,7 +538,7 @@ async def settings(interaction: discord.Interaction) -> None:
     
     cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))    
     if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO settings (username, DMonStartup) VALUES (?,?)", (user_id, 0))
+        cursor.execute("INSERT INTO settings (username, DMonStartup, PingonGold) VALUES (?,?)", (user_id, 0, 0))
         conn.commit()
     
     cursor.close()
@@ -534,18 +547,18 @@ async def settings(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Choose an option below:", view=SettingsView(user_id), ephemeral=True)
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
-async def showBanner(interaction: discord.Interaction):
+async def showBanner(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
     embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/banner.gif?=raw")
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 @bot.command()
-async def pring(ctx, *, arg):
+async def pring(ctx, *, arg) -> None:
     await ctx.send(arg)
 
 @bot.tree.command(name="compare", description="Compare your rolls to other people!")
-async def comparision(interaction: discord.Interaction, user: discord.Member):
+async def comparision(interaction: discord.Interaction, user: discord.Member) -> None:
     client_user_id = interaction.user.id
     target_user_id = user.id
     
@@ -553,25 +566,23 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     
     cursor = conn.cursor()
     
-    try:
-        cursor.execute("SELECT * FROM stats WHERE username = ?", (client_user_id,))
-        clientChoice = cursor.fetchone()
-    except:
-        await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
-        return
+    cursor.execute("SELECT * FROM stats WHERE username = ?", (client_user_id,))
+    clientChoice = cursor.fetchone()
     
-    try:
-        cursor.execute("SELECT * FROM stats WHERE username = ?", (target_user_id,))
-        targetChoice = cursor.fetchone()
-    except:
-        await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
-        return
+    cursor.execute("SELECT * FROM stats WHERE username = ?", (target_user_id,))
+    targetChoice = cursor.fetchone()
     
     cursor.close()
     conn.close()
     
-    clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled = clientChoice
-    targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled = targetChoice
+    try: clientUsername, clientRolls, clientLimited, clientGold, clientPurple, clientRolled = clientChoice
+    except:
+        await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
+        return
+    try: targetUsername, targetRolls, targetLimited, targetGold, targetPurple, targetRolled = targetChoice
+    except:
+        await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
+        return
     
     # unpacking information
     clientFrequency = unpack_rolled_info(clientRolled, True)
@@ -591,8 +602,9 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     diffPuffs.extend(f"{key}_{-targetFrequency[key]}" for key in sorted(target_dif_keys))
         
     averageList = []
-    for i in range(len([diffRolls, diffLimited, diffGold, diffpurple])):
-        if i >= 0:
+    varList = [diffRolls, diffLimited, diffGold, diffpurple]
+    for i in range(len(varList)):
+        if varList[i] >= 0:
             averageList.append(1)
         else:
             averageList.append(-1)
@@ -607,6 +619,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     diffPuffsdict = {}
     for val in diffPuffs:
         diffPuffsdict[val.split("_")[0]] = int(val.split("_")[1])
+    diffPuffsdict[list(diffPuffsdict.keys())[0]] = -next(iter(diffPuffsdict.values()))# inverts the first value in the dict since it is calculated differently than the others
     
     embed = discord.Embed(title=f"Puff Comparison with {await bot.fetch_user(target_user_id)}", color=color)
     embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {"more" if diffRolls < 0 else "less"} rolls than them", inline=False)
