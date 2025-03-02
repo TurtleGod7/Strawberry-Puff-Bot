@@ -18,7 +18,7 @@ items_per_page = 5
 settings_expiry = 60
 ascension_max = 10
 avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
-banner_path = "assets\\profile\\banner.gif" if os.name == "nt" else "assets/profile/banner.gif"
+banner_path = "assets\\profile\\banner_angel.gif" if os.name == "nt" else "assets/profile/banner_luna.gif"
 rarityWeights = [.887, .083, .03]
 limitedWeights = [.8, .2]
 weightsMultipier = { # Not to be manipulated, just needs to be global
@@ -370,7 +370,7 @@ async def statistics(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
     embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {"time" if limited == 1 else "times"}, a gold rarity puff **{gold}** {"time" if gold == 1 else "times"}, and a purple rarity puff **{purple}** {"time" if purple == 1 else "times"}!", inline=False)
-    embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{avgPity}**", inline=False)
+    embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
