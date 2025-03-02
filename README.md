@@ -1,6 +1,6 @@
 # Strawberry Puff Bot
 
-Strawberry Puff Bot is a Discord gacha bot designed to enhance your server experience with fun and interactive puff rolling features. The current banner is: ![Latest Banner](assets/profile/banner_luna.gif)
+Strawberry Puff Bot is a Discord gacha bot designed to enhance your server experience with fun and interactive puff rolling features. The current banner is: ![Latest Banner](assets/profile/banner_angel.gif)
 
 ## Features
 
