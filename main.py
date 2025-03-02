@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from random import choices
 import sqlite3 # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
+import time
+import datetime
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -19,6 +21,8 @@ settings_expiry = 60
 ascension_max = 10
 avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
 banner_path = "assets\\profile\\banner_angel.gif" if os.name == "nt" else "assets/profile/banner_luna.gif"
+banner_start = "3/2/2025"
+banner_end = "4/1/2025"
 rarityWeights = [.887, .083, .03]
 limitedWeights = [.8, .2]
 weightsMultipier = { # Not to be manipulated, just needs to be global
@@ -555,8 +559,15 @@ async def settings(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
 async def showBanner(interaction: discord.Interaction) -> None:
+    now  = int(time.time())
+    start_time = int(time.mktime(datetime.datetime.strptime(banner_start, "%m/%d/%Y").timetuple()))
+    end_time = int(time.mktime(datetime.datetime.strptime(banner_end, "%m/%d/%Y").timetuple()))
+    delta_time = end_time - now
+    delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
+    
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-    embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/banner.gif?=raw")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{banner_path}?=raw")
+    embed.add_field(name="Banner Dates", value=f"Start: <t:{start_time}:F>\nEnd: <t:{end_time}:F>\nTime till end: {delta_time}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
@@ -606,8 +617,8 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     target_dif_keys = set(targetFrequency) - common_keys
 
     diffPuffs.extend(f"{key}_{clientFrequency[key] - targetFrequency[key]}" for key in sorted(common_keys))
-    diffPuffs.extend(f"{key}_{clientFrequency[key]}" for key in sorted(client_dif_keys))
-    diffPuffs.extend(f"{key}_{-targetFrequency[key]}" for key in sorted(target_dif_keys))
+    diffPuffs.extend(f"{key}_{clientFrequency[key]+1}" for key in sorted(client_dif_keys))
+    diffPuffs.extend(f"{key}_{-targetFrequency[key]+1}" for key in sorted(target_dif_keys))
         
     averageList = []
     varList = [diffPity, diffRolls, diffLimited, diffGold, diffpurple]
