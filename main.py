@@ -1,11 +1,13 @@
 import os
 import discord
 from discord.ext import commands
+from discord.ext.commands import Converter, BadArgument
 from dotenv import load_dotenv
 from random import choices
-import sqlite3 # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
+from sqlite3 import connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
-import time
+from math import ceil, floor
+from time import time, mktime
 from datetime import datetime
 load_dotenv()
 
@@ -98,7 +100,7 @@ def pack_rolled_info(frequencyDict: dict) -> str | None:
 async def on_ready() -> None:
     await bot.tree.sync()
     
-    conn = sqlite3.connect("assets\\database\\puffs.db") if os.name == "nt" else sqlite3.connect("assets/database/puffs.db")
+    conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
     
     cursor = conn.cursor()
     
@@ -119,7 +121,7 @@ async def on_ready() -> None:
     cursor.close()
     conn.close()
     
-    conn = sqlite3.connect("assets\\database\\users.db") if os.name == "nt" else sqlite3.connect("assets/database/users.db")
+    conn = connect("assets\\database\\users.db") if os.name == "nt" else connect("assets/database/users.db")
     
     cursor = conn.cursor()
     
@@ -187,7 +189,7 @@ async def on_ready() -> None:
 async def Roll_a_puff(interaction: discord.Interaction) -> None:
     user_id = interaction.user.id
 
-    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
 
     cursor = conn.cursor()
     
@@ -204,7 +206,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     cursor.close()
     conn.close()
     
-    conn = sqlite3.connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/puffs.db", check_same_thread=False)
+    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
 
     cursor = conn.cursor()
     
@@ -256,7 +258,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     chance = round(round((weights/total_weight)*weightsMultipier.get(isRareval), 4)*100,2)
     
-    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
     
@@ -278,30 +280,29 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     
     cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
-    
-    if int(isRare) == 3:
-        cursor.execute("UPDATE stats SET limited = limited + 1 WHERE username = ?", (user_id,))
-        cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
-        avgPity = cursor.fetchone()[0]
-        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
-    if int(isRare) == 2:
-        cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
-        cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
-        avgPity = cursor.fetchone()[0]
-        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
-    if int(isRare) == 1:
-        cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
-    
     cursor.execute("UPDATE pity SET pity = pity + 1 WHERE username = ?", (user_id,))
 
-    if isRare >= 2:
+    if int(isRare) >= 2:
         cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
+
+        if int(isRare) > 2:
+            cursor.execute("UPDATE stats SET limited = limited + 1 WHERE username = ?", (user_id,))
+        else:
+            cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
+        
+        cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
+        avgPity = cursor.fetchone()[0]
+        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
     
+    if int(isRare) == 1:
+        cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
+        
     cursor.execute("UPDATE stats SET rolledGolds = ? WHERE username = ?", (pack_rolled_info(frequency), user_id))
     
     cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO settings (username, DMonStartup, PingonGold) VALUES (?, ?, ?)", (user_id, 0, 0)) 
+    
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
     
@@ -341,7 +342,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def statistics(interaction: discord.Interaction) -> None:
-    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
     
@@ -426,7 +427,7 @@ class DropRatesView(discord.ui.View):
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
 async def drop_rates(interaction: discord.Interaction) -> None:
     db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
 
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = 0")
@@ -456,12 +457,31 @@ async def suggestions(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
 async def help(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
-    embed.add_field(name="/puffroll", value="This is the major mechanic of this bot and this is how you set up your local account.")
-    embed.add_field(name="/statistics", value="This is the statistics function so you can understand more about your luck.")
-    embed.add_field(name="/chances", value="This is the chances function that displays information for each puff.")
-    embed.add_field(name="/suggestions", value="Use this function to give us any suggestions")
-    embed.add_field(name="/info", value="Function that provides valuable details and information about how this bot works")
-    embed.add_field(name="/settings", value="Use this function to change any settings you want with the bot", inline=False)
+    embed.add_field(
+        name="/puffroll", 
+        value="This is the major mechanic of this bot and this is how you set up your local account."
+    )
+    embed.add_field(
+        name="/statistics", 
+        value="This is the statistics function so you can understand more about your luck."
+    )
+    embed.add_field(
+        name="/chances", 
+        value="This is the chances function that displays information for each puff."
+    )
+    embed.add_field(
+        name="/suggestions", 
+        value="Use this function to give us any suggestions"
+    )
+    embed.add_field(
+        name="/info", 
+        value="Function that provides valuable details and information about how this bot works"
+    )
+    embed.add_field(
+        name="/settings", 
+        value="Use this function to change any settings you want with the bot", 
+        inline=False
+    )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
@@ -515,7 +535,7 @@ class SettingsView(discord.ui.View):
         value = int(select.values[0])
         
         db_path = "assets\\database\\users.db" if os.name == "nt" else "assets/database/users.db"
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = connect(db_path, check_same_thread=False)
         cursor = conn.cursor()
 
         settingsDict = {
@@ -544,7 +564,7 @@ async def settings(interaction: discord.Interaction) -> None:
     user_id = interaction.user.id
     
     db_path = "assets\\database\\users.db" if os.name == "nt" else "assets/database/users.db"
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn = connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
     
     cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))    
@@ -559,9 +579,9 @@ async def settings(interaction: discord.Interaction) -> None:
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
 async def showBanner(interaction: discord.Interaction) -> None:
-    now  = int(time.time())
-    start_time = int(time.mktime(datetime.strptime(banner_start, "%m/%d/%Y").timetuple()))
-    end_time = int(time.mktime(datetime.strptime(banner_end, "%m/%d/%Y").timetuple()))
+    now  = int(time())
+    start_time = int(mktime(datetime.strptime(banner_start, "%m/%d/%Y").timetuple()))
+    end_time = int(mktime(datetime.strptime(banner_end, "%m/%d/%Y").timetuple()))
     delta_time = end_time - now
     delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
     
@@ -580,7 +600,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     client_user_id = interaction.user.id
     target_user_id = user.id
     
-    conn = sqlite3.connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else sqlite3.connect("assets/database/users.db", check_same_thread=False)
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
     
@@ -630,10 +650,18 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     try: averageList.append(1 if mean([1 if int(v.split("_")[1]) > 0 else -1 for v in diffPuffs]) > 0 else -1)
     except: averageList.append(0)
     #Gets average better or worse to get embed color
-    if mean(averageList) > 0:
-        color = discord.Color.brand_green()
+    averageListColor = {
+        -1: discord.Color.brand_red(),#
+        0: discord.Color.yellow(),#
+        1: discord.Color.brand_green(),#
+    }
+    avgListmean = mean(averageList)
+    if avgListmean > 0:
+        color = averageListColor.get(ceil(avgListmean))
+    elif avgListmean < 0:
+        color = averageListColor.get(floor(avgListmean))
     else:
-        color = discord.Color.brand_red()
+        color = averageListColor.get(0)
     
     diffPuffsdict = {}
     for val in diffPuffs:
@@ -658,6 +686,56 @@ async def github(interaction: discord.Interaction) -> None:
 @bot.command()
 async def skater(ctx, *, arg):
     await ctx.send(arg + " <:skater:1345246453911781437>")
+
+
+class ToLowerConverter(Converter):
+    async def convert(self, ctx, argument):
+        if not isinstance(argument, str):
+            raise BadArgument("Argument must be a string")
+        return argument.lower()
+
+@bot.command()
+async def get(ctx, *, arg: ToLowerConverter):
+    file = str(arg) + ".png"
+    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM puffs WHERE imagepath = ?", (file,))
+    try:
+        id, name, description, imagepath, weight, isRare = cursor.fetchone()
+    except:
+        embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
+        embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{str(arg)+".gif"}?=raw")
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+        return
+    cursor.close()
+    conn.close()
+    
+    rareColors = {
+        0 : discord.Color.blue(),
+        1 : discord.Color.purple(),
+        2 : discord.Color.gold(),
+        3 : discord.Color.greyple()
+    }
+    chance = 100
+    pity = "NaN"
+    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{imagepath}?=raw"
+    
+    embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
+    if isRare >= 2:
+        embed.add_field(
+            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis is your NaNth ascension"
+        )
+    else:
+        embed.add_field(
+            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
+        )
+    embed.set_image(url=image_path)
+    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    
+    await ctx.send(embed=embed)
 
 # add pvp fucntion
 bot.run(TOKEN) # type: ignore
