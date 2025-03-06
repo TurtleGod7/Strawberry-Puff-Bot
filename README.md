@@ -32,7 +32,7 @@ By the way, currently I don't have the capabilities to have the bot running 24/7
 
 ## Installation
 
-Please ensure your Python version is 3.6.X and greater. The code will not run on any earlier version of Python.
+Please ensure your Python version is 3.6.X and greater[^1]. The code will not run on any earlier version of Python.
 
 1. Clone the repository:
 
@@ -52,11 +52,11 @@ Please ensure your Python version is 3.6.X and greater. The code will not run on
     python -m pip install -r requirements.txt
     ```
 
-    - Preferably make this in a venv named `.venv`[^1]
+    - Preferably make this in a venv named `.venv`[^2]
 
 4. Change personal information (Optional)
 
-    Change personal information about your repository in `main.py` in the `### Control Variables` section at the top (lines 18 & 19)[^2]
+    Change personal information about your repository in `main.py` in the `### Control Variables` section at the top (lines 18 & 19)[^3]
 
     ```python
     git_username = "Your_Github_Username"
@@ -65,7 +65,7 @@ Please ensure your Python version is 3.6.X and greater. The code will not run on
 
 ## Usage
 
-1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^3]:
+1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^4]:
 
     ```env
     DISCORD_TOKEN=your_token_here
@@ -95,8 +95,10 @@ For any questions or suggestions, please open an issue or contact me.
 
 The code was written by @TurtleGod7 and the puffs were drawn and created by @orckadork.
 
-[^1]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
+[^1]: I've only tested this code on python 3.9.6 on my Mac but in theory it should work on 3.6.X and greater.
 
-[^2]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+[^2]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
 
-[^3]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
+[^3]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+
+[^4]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information

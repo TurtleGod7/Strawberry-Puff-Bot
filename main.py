@@ -62,7 +62,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-async def dm_ping(user_id: int, message: str) -> None:
+async def dm_ping(user_id: int, message: str):
     try:
         user = await bot.fetch_user(user_id)
     except Exception as e:
@@ -92,12 +92,12 @@ def unpack_rolled_info(rollInfo: str, returndictempty=False):
     
     return dict(sorted(frequency.items()))
 
-def pack_rolled_info(frequencyDict: dict) -> str | None:
+def pack_rolled_info(frequencyDict: dict):
     if frequencyDict is None: return None
     return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
 
 @bot.event
-async def on_ready() -> None:
+async def on_ready():
     await bot.tree.sync()
     ''' Remove this when you want to run it (it makes the bot slower when I already have the data)
     conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
@@ -186,7 +186,7 @@ async def on_ready() -> None:
     print(f'Logged in as {bot.user}')    
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
-async def Roll_a_puff(interaction: discord.Interaction) -> None:
+async def Roll_a_puff(interaction: discord.Interaction):
     user_id = interaction.user.id
 
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
@@ -342,7 +342,7 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
-async def statistics(interaction: discord.Interaction) -> None:
+async def statistics(interaction: discord.Interaction):
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
@@ -369,13 +369,13 @@ async def statistics(interaction: discord.Interaction) -> None:
     
     ascensions_description_string = ""
     for k, v in frequency.items():
-        ascensions_description_string += f"* *{k}*  **{v}** {"time" if v == 1 else "times"}\n"
+        ascensions_description_string += f"* *{k}*  **{v}** {'time' if v == 1 else 'times'}\n"
     if ascensions_description_string == "":
         ascensions_description_string += "You're seeing this because you didn't roll any gold/limited rarity puffs :sob:"
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
-    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {"time" if limited == 1 else "times"}, a gold rarity puff **{gold}** {"time" if gold == 1 else "times"}, and a purple rarity puff **{purple}** {"time" if purple == 1 else "times"}!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {'time' if limited == 1 else 'times'}, a gold rarity puff **{gold}** {'time' if gold == 1 else 'times'}, and a purple rarity puff **{purple}** {'time' if purple == 1 else 'times'}!", inline=False)
     embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
@@ -426,7 +426,7 @@ class DropRatesView(discord.ui.View):
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
-async def drop_rates(interaction: discord.Interaction) -> None:
+async def drop_rates(interaction: discord.Interaction):
     db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
     conn = connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
@@ -450,13 +450,13 @@ async def drop_rates(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
 @bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
-async def suggestions(interaction: discord.Interaction) -> None:
+async def suggestions(interaction: discord.Interaction):
     embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
-async def help(interaction: discord.Interaction) -> None:
+async def help(interaction: discord.Interaction):
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
     embed.add_field(
         name="/puffroll", 
@@ -488,7 +488,7 @@ async def help(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="info", description="Just some good to know information")
-async def information(interaction: discord.Interaction) -> None:
+async def information(interaction: discord.Interaction):
     embed = discord.Embed(title="Good to know information", color=discord.Color.dark_orange())
     embed.add_field(
         name="Rarities", 
@@ -561,7 +561,7 @@ class SettingsView(discord.ui.View):
         self.stop()
 
 @bot.tree.command(name="settings", description="Just set up your settings")
-async def settings(interaction: discord.Interaction) -> None:
+async def settings(interaction: discord.Interaction):
     user_id = interaction.user.id
     
     db_path = "assets\\database\\users.db" if os.name == "nt" else "assets/database/users.db"
@@ -579,7 +579,7 @@ async def settings(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Choose an option below:", view=SettingsView(user_id), ephemeral=True)
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
-async def showBanner(interaction: discord.Interaction) -> None:
+async def showBanner(interaction: discord.Interaction):
     now  = int(time())
     start_time = int(mktime(datetime.strptime(banner_start, "%m/%d/%Y").timetuple()))
     end_time = int(mktime(datetime.strptime(banner_end, "%m/%d/%Y").timetuple()))
@@ -593,11 +593,11 @@ async def showBanner(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 @bot.command()
-async def pring(ctx, *, arg) -> None:
+async def pring(ctx, *, arg):
     await ctx.send(arg)
 
 @bot.tree.command(name="compare", description="Compare your rolls to other people!")
-async def comparision(interaction: discord.Interaction, user: discord.Member) -> None:
+async def comparision(interaction: discord.Interaction, user: discord.Member):
     client_user_id = interaction.user.id
     target_user_id = user.id
     
@@ -631,7 +631,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     diffPity = targetavgPity-clientavgPity
     diffLimited = clientLimited-targetLimited
     diffGold = clientGold-targetGold
-    diffpurple = clientPurple-targetPurple
+    diffPurple = clientPurple-targetPurple
     diffPuffs = []# Same formatting as saving info to db
     common_keys = set(clientFrequency) & set(targetFrequency)
     client_dif_keys = set(clientFrequency) - common_keys
@@ -642,7 +642,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
     diffPuffs.extend(f"{key}_{targetFrequency[key]-1}" for key in sorted(target_dif_keys))
         
     averageList = []
-    varList = [diffPity, diffRolls, diffLimited, diffGold, diffpurple]
+    varList = [diffPity, diffRolls, diffLimited, diffGold, diffPurple]
     for i in range(len(varList)):
         if varList[i] >= 0:
             averageList.append(1)
@@ -669,17 +669,17 @@ async def comparision(interaction: discord.Interaction, user: discord.Member) ->
         diffPuffsdict[val.split("_")[0]] = int(val.split("_")[1])
     
     embed = discord.Embed(title=f"Puff Comparison with {await bot.fetch_user(target_user_id)}", color=color)
-    embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {"more" if diffRolls < 0 else "less"} rolls than them", inline=False)
-    embed.add_field(name="Average Pity", value=f"Your average pity is {round(abs(diffPity),2)} {"more" if diffPity < 0 else "less"} than them", inline=False)
-    embed.add_field(name="Limiteds", value=f"You have {abs(diffLimited)} {"more" if diffLimited > 0 else "less"} limited puffs than them", inline=False)
-    embed.add_field(name="Golds", value=f"You have {abs(diffGold)} {"more" if diffGold > 0 else "less"} gold puffs than them", inline=False)
-    embed.add_field(name="Purples", value=f"You have {abs(diffpurple)} {"more" if diffpurple > 0 else "less"} purple puffs than them", inline=False)
+    embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {'more' if diffRolls < 0 else 'less'} rolls than them", inline=False)
+    embed.add_field(name="Average Pity", value=f"Your average pity is {round(abs(diffPity),2)} {'more' if diffPity < 0 else 'less'} than them", inline=False)
+    embed.add_field(name="Limiteds", value=f"You have {abs(diffLimited)} {'more' if diffLimited > 0 else 'less'} limited puffs than them", inline=False)
+    embed.add_field(name="Golds", value=f"You have {abs(diffGold)} {'more' if diffGold > 0 else 'less'} gold puffs than them", inline=False)
+    embed.add_field(name="Purples", value=f"You have {abs(diffPurple)} {'more' if diffPurple > 0 else 'less'} purple puffs than them", inline=False)
     embed.add_field(name="More Gold/Limited Info", value = "\n".join(f"* You have {v} more {k}s than them" if v >= 0 else f"* You have {abs(v)} less {k}s than them" for k, v in diffPuffsdict.items()), inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="github", description="Get the GitHub link for this bot")
-async def github(interaction: discord.Interaction) -> None:
+async def github(interaction: discord.Interaction):
     embed = discord.Embed(title="Github", color=discord.Color.random())
     embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{git_username}/{git_repo}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -698,7 +698,7 @@ class ToLowerConverter(commands.Converter):
 async def get(ctx, *, arg: ToLowerConverter):
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-        embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{str(arg)+".gif"}?=raw")
+        embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
