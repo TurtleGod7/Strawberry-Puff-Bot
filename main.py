@@ -1,14 +1,14 @@
 import os
-import discord
-from discord.ext import commands
-from discord.ext.commands import Converter, BadArgument
-from dotenv import load_dotenv
 from random import choices
 from sqlite3 import connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
 from math import ceil, floor
 from time import time, mktime
 from datetime import datetime
+import discord
+from discord.ext import commands
+from dotenv import load_dotenv
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -99,7 +99,7 @@ def pack_rolled_info(frequencyDict: dict) -> str | None:
 @bot.event
 async def on_ready() -> None:
     await bot.tree.sync()
-    
+    ''' Remove this when you want to run it (it makes the bot slower when I already have the data)
     conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
     
     cursor = conn.cursor()
@@ -120,11 +120,11 @@ async def on_ready() -> None:
     conn.commit()
     cursor.close()
     conn.close()
-    
+    '''
     conn = connect("assets\\database\\users.db") if os.name == "nt" else connect("assets/database/users.db")
     
     cursor = conn.cursor()
-    
+    ''' Same here
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS stats (
         "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
@@ -154,7 +154,7 @@ async def on_ready() -> None:
     cursor.execute("PRAGMA journal_mode=WAL")
     
     conn.commit()
-    
+    '''
     cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
     PeopletoDM = cursor.fetchall()
     cursor.close()
@@ -687,27 +687,26 @@ async def github(interaction: discord.Interaction) -> None:
 async def skater(ctx, *, arg):
     await ctx.send(arg + " <:skater:1345246453911781437>")
 
-
-class ToLowerConverter(Converter):
+class ToLowerConverter(commands.Converter):
     async def convert(self, ctx, argument):
         if not isinstance(argument, str):
-            raise BadArgument("Argument must be a string")
+            raise commands.BadArgument("Argument must be a string")
         return argument.lower()
 
 @bot.command()
 async def get(ctx, *, arg: ToLowerConverter):
-    file = str(arg) + ".png"
-    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM puffs WHERE imagepath = ?", (file,))
-    try:
-        id, name, description, imagepath, weight, isRare = cursor.fetchone()
-    except:
+    if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
         embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{str(arg)+".gif"}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
+
+    file = str(arg) + ".png"
+    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, description, isRare FROM puffs WHERE imagepath = ?", (file,))
+    name, description, isRare = cursor.fetchone()
     cursor.close()
     conn.close()
     
@@ -719,7 +718,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     }
     chance = 100
     pity = "NaN"
-    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{imagepath}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{file}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:

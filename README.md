@@ -1,6 +1,10 @@
 # Strawberry Puff Bot
 
-Strawberry Puff Bot is a Discord gacha bot designed to enhance your server experience with fun and interactive puff rolling features. The current banner is: ![Latest Banner](assets/profile/banner_angel.gif)
+Strawberry Puff Bot is a Discord gacha bot designed to enhance your server experience with fun and interactive rolling features for cute doodles (puffs).
+
+## Current Banner
+
+![Latest Banner](assets/profile/banner_angel.gif)
 
 ## Features
 
@@ -10,6 +14,21 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 - Compare your rolls with other users
 - Customizable settings
 - And more!
+
+### Read the following section if you want to play with the bot and don't want a copy of it, else go to [Installation](#installation) and [Usage](#usage)
+
+## Bot Info
+
+This bot is live and is available for you to add to your Discord server whenever you want!
+
+### Bot Install Links
+
+- [User Install](https://discord.com/oauth2/authorize?client_id=1338650603617910817&integration_type=1&scope=applications.commands)
+- [Guild (Server) Install](https://discord.com/oauth2/authorize?client_id=1338650603617910817&permissions=277025507328&integration_type=0&scope=bot)
+
+The bot's discord username is `Strawberry Puff Bot#3856` and its App ID is `1338650603617910817`. Please use this if you need help verifying my bot. Also on the bot's profile the "Copy Link" option links to the Guild Install link provided above.
+
+By the way, currently I don't have the capabilities to have the bot running 24/7, so expect there to be lots of downtime for bot usage. Although. there happens to be a setting that pings you on startup if you're worrying about when you can play with the bot. Other then that, have fun playing with this passion project I made and make sure to thank @orckadork for the drawings!!!
 
 ## Installation
 
@@ -28,18 +47,31 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 3. Install the dependencies:
 
     ```bash
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
+    ```
+
+    - Preferably make this in a venv named `.venv`[^1]
+
+4. Change personal information (Optional)
+
+    Change personal information about your repository in `main.py` in the `### Control Variables` section at the top (lines 18 & 19)[^2]
+
+    ```python
+    git_username = "Your_Github_Username"
+    git_repo = "Your_Github_Repository_Name"
     ```
 
 ## Usage
 
-1. Create a `.env` file in the root directory and add your Discord bot token:
+1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^3]:
 
     ```env
     DISCORD_TOKEN=your_token_here
     ```
 
-2. Start the bot:
+2. Remove the multi-line comments under the `on_ready()` function for your first time running bot (they may be added back later)
+
+3. Start the bot:
 
     ```bash
     python main.py
@@ -47,7 +79,7 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository and create a pull request with your changes.
+Contributions are welcome! Please fork the repository and create a pull request with your changes. I'm also working on a website and a PvP function for the bot and I would love for some support on that.
 
 ## License
 
@@ -55,10 +87,14 @@ This project is licensed under the GNU General Public License. See the [LICENSE]
 
 ## Contact
 
-For any questions or suggestions, please open an issue or contact the repository owner.
+For any questions or suggestions, please open an issue or contact me.
 
 ## Credit
 
-The code was written by @TurtleGod7 and the puffs were drawn and created by @whendei[^1].
+The code was written by @TurtleGod7 and the puffs were drawn and created by @orckadork.
 
-[^1]: Discord Username
+[^1]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
+
+[^2]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+
+[^3]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
