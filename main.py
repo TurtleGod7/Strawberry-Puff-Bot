@@ -324,9 +324,10 @@ async def Roll_a_puff(interaction: discord.Interaction) -> None:
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
+        ascension_text = "is your first time getting this puff!" if frequency[name] == 0 else f"is your **{frequency[name]}**{numsuffix.get(frequency[name], 'th')} ascension"
         embed.add_field(
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {"is your first time getting this puff!" if frequency[name] == 0 else f"is your **{frequency[name]}**{numsuffix.get(frequency[name], "th")} ascension"}"
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
         )
         if PingonGold is not None and PingonGold == 1:
             await dm_ping(user_id,"you rolled a gold rarity puff! :yellow_square:\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n" if isRare == 2 else "you rolled a limited rarity puff! <:gray_square:1342727158673707018>\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")

@@ -32,7 +32,7 @@ By the way, currently I don't have the capabilities to have the bot running 24/7
 
 ## Installation
 
-Please ensure your Python version is 3.11.X and greater. The code will not run on any earlier version of Python.
+Please ensure your Python version is 3.6.X and greater. The code will not run on any earlier version of Python.
 
 1. Clone the repository:
 
