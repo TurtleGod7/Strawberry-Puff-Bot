@@ -717,7 +717,7 @@ async def get(ctx, *, arg: ToLowerConverter):
         3 : discord.Color.greyple()
     }
     chance = 100
-    pity = "NaN"
+    pity = None
     image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{file}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
