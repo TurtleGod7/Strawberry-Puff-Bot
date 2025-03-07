@@ -7,13 +7,17 @@ from time import time, mktime
 from datetime import datetime
 import discord
 from discord.ext import commands
+from discord.ext import tasks
 from dotenv import load_dotenv
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+ADMIN_USERS = set(map(int,os.getenv("ADMIN_USERS", "").split(",")))
 
 ### Control variables
+STOP_PING_ON_STARTUP = False
+DEBUG = False
 pity_limit = 200
 git_username = "TurtleGod7"
 git_repo = "Strawberry-Puff-Bot"
@@ -21,20 +25,32 @@ button_page_expiry = 60
 items_per_page = 5
 settings_expiry = 60
 ascension_max = 10
-avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/avatar.gif" # This and banner to be used when setting it as a gif
+avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/puffs/strawberry.png" # This and banner to be used when setting it as a gif
 banner_file = "banner_angel.gif"
 banner_start = "3/2/2025"
 banner_end = "4/1/2025"
 rarityWeights = [.887, .083, .03]
 limitedWeights = [.8, .2]
-weightsMultipier = { # Not to be manipulated, just needs to be global
-        0 : rarityWeights[0],
-        1 : rarityWeights[1],
-        2 : rarityWeights[2]*limitedWeights[0],
-        3 : rarityWeights[2]*limitedWeights[1],
-        4 : limitedWeights[0], # When pity hits 100
-        5 : limitedWeights[1], 
+statuses = [
+    discord.Activity(type=discord.ActivityType.playing, name="with puffs", state="The puff is one of the cutest animals in the animal kingdom. They are known for how fluffy they are and make as great pillows"),
+    discord.Activity(type=discord.ActivityType.watching, name="over the puff kingdom", state="There's lots of land that the king puff has to manage, if only he paid me to do it."),
+    discord.Activity(type=discord.ActivityType.watching, name="for the next fairy puff", state="I heard that they're really rare, but I'm sure you'll get it soon"),
+    discord.Activity(type=discord.ActivityType.watching, name="the puff kingdom grow", state="I'm sure that the puff kingdom will be the best kingdom in the world"),
+    discord.Activity(type=discord.ActivityType.watching, name="you use `/help` when you need help", state="It's always there to help you whenever you're lost. Try going to a server with me in it to see what I can do"),
+    discord.Activity(type=discord.ActivityType.competing, name="for max ascension puffs", state="I heard that the max ascension puff is rare to have. If only spamming this bot wasn't allowed, it would be even rarer"),
+]
+###
+
+### Global Variables that DON'T need to be changed
+weightsMultipier = {
+    0 : rarityWeights[0],
+    1 : rarityWeights[1],
+    2 : rarityWeights[2]*limitedWeights[0],
+    3 : rarityWeights[2]*limitedWeights[1],
+    4 : limitedWeights[0], # When pity hits 100
+    5 : limitedWeights[1], 
 }
+activity_task_running = False
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 '''
@@ -61,6 +77,12 @@ thread.start()
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+class ToLowerConverter(commands.Converter):
+    async def convert(self, ctx, argument):
+        if not isinstance(argument, str):
+            raise commands.BadArgument("Argument must be a string")
+        return argument.lower()
 
 async def dm_ping(user_id: int, message: str):
     try:
@@ -96,9 +118,36 @@ def pack_rolled_info(frequencyDict: dict):
     if frequencyDict is None: return None
     return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
 
+@tasks.loop(seconds=1800)
+async def update_status():
+    global activity_task_running
+    activity_task_running = True
+    
+    current_status = statuses.pop(0)
+    statuses.append(current_status)
+    await bot.change_presence(activity=current_status)
+    
+    activity_task_running = False
+
+def is_authorised_user():
+    async def predicate(ctx):
+        if ctx.author.id in ADMIN_USERS:
+            return True
+        return False
+    return commands.check(predicate)
+
 @bot.event
 async def on_ready():
     await bot.tree.sync()
+    update_status.start()
+    
+    if DEBUG:
+        print("Registered commands:")
+        for command in bot.tree.get_commands():
+            print(f" - {command.name}")
+        
+        print(f"DEBUG: Admin Users: {ADMIN_USERS}")
+    
     ''' Remove this when you want to run it (it makes the bot slower when I already have the data)
     conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
     
@@ -155,8 +204,10 @@ async def on_ready():
     
     conn.commit()
     '''
-    cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
-    PeopletoDM = cursor.fetchall()
+    PeopletoDM = []
+    if not STOP_PING_ON_STARTUP:
+        cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
+        PeopletoDM = cursor.fetchall()
     cursor.close()
     conn.close()
     
@@ -187,6 +238,9 @@ async def on_ready():
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
 async def Roll_a_puff(interaction: discord.Interaction):
+    await interaction.response.defer()
+    # So Discord doesn't time out the interaction
+    
     user_id = interaction.user.id
 
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
@@ -339,7 +393,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def statistics(interaction: discord.Interaction):
@@ -349,12 +403,13 @@ async def statistics(interaction: discord.Interaction):
     
     user_id = interaction.user.id
     
-    cursor.execute("SELECT * FROM stats WHERE username = ?", (user_id,))
-    choice = cursor.fetchone()
-    
-    if choice is None:
+    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))    
+    if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds, avgPity) VALUES (?, ?, ?, ?, ?, ?)", (user_id, 0, 0, 0, 0, None, 0))
         conn.commit()
+    
+    cursor.execute("SELECT * FROM stats WHERE username = ?", (user_id,))
+    choice = cursor.fetchone()
     
     username, rolls,limited, gold, purple, rolledGolds, avgPity = choice
     
@@ -688,13 +743,8 @@ async def github(interaction: discord.Interaction):
 async def skater(ctx, *, arg):
     await ctx.send(arg + " <:skater:1345246453911781437>")
 
-class ToLowerConverter(commands.Converter):
-    async def convert(self, ctx, argument):
-        if not isinstance(argument, str):
-            raise commands.BadArgument("Argument must be a string")
-        return argument.lower()
-
 @bot.command()
+@is_authorised_user()
 async def get(ctx, *, arg: ToLowerConverter):
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
@@ -725,7 +775,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     if isRare >= 2:
         embed.add_field(
             name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis is your NaNth ascension"
+            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis is your Noneth ascension"
         )
     else:
         embed.add_field(
@@ -736,6 +786,23 @@ async def get(ctx, *, arg: ToLowerConverter):
     embed.set_footer(text=f"Requested by {ctx.author.display_name}")
     
     await ctx.send(embed=embed)
+
+@bot.command()
+@is_authorised_user()
+async def activity_change(ctx):
+    global activity_task_running
+    
+    if activity_task_running:
+        await ctx.send("Activity task is running right now, please try again", ephemeral=True)
+        return
+    
+    update_status.restart()
+    await ctx.send("Activity task has been changed", ephemeral=True)
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):# Would only be for admin commands right now
+        print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
 
 # add pvp fucntion
 bot.run(TOKEN) # type: ignore

@@ -65,10 +65,11 @@ Please ensure your Python version is 3.6.X and greater[^1]. The code will not ru
 
 ## Usage
 
-1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^4]:
+1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^4] and Admin users:
 
     ```env
     DISCORD_TOKEN=your_token_here
+    ADMIN_USERS=discord_user_id_1,discord_user_id_2,etc.
     ```
 
 2. Remove the multi-line comments under the `on_ready()` function for your first time running bot (they may be added back later)
