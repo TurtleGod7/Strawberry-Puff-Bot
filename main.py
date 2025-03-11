@@ -117,9 +117,9 @@ def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
     key. If the `returndictempty` parameter is set to `True` and `rollInfo` is `None`, an empty
     dictionary is returned. If `rollInfo` is `None` without
     """
-    if returndictempty and rollInfo == None:
+    if returndictempty and rollInfo is None:
         return {}
-    if rollInfo == None:
+    if rollInfo is None:
         return
     
     frequency = {}
@@ -129,25 +129,29 @@ def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
     
     return dict(sorted(frequency.items()))
 
-def pack_rolled_info(frequencyDict: dict):
+def pack_rolled_info(frequency_dict: dict):
     """
-    The function `pack_rolled_info` takes a dictionary `frequencyDict` as input and returns a string
+    The function `pack_rolled_info` takes a dictionary `frequency_dict` as input and returns a string
     representation of the key-value pairs in the dictionary separated by semicolons.
     
-    :param frequencyDict: The `frequencyDict` parameter is a dictionary that contains the frequency of
+    :param frequency_dict: The `frequency_dict` parameter is a dictionary that contains the frequency of
     rolled items. Each key in the dictionary represents an item, and the corresponding value represents
     the frequency of that item being rolled
-    :type frequencyDict: dict
+    :type frequency_dict: dict
     :return: The function `pack_rolled_info` returns a string that contains key-value pairs from the
-    input `frequencyDict` dictionary, separated by semicolons. Each key-value pair is formatted as
-    `key_value`. If the input `frequencyDict` is `None`, the function returns `None`. If the resulting
+    input `frequency_dict` dictionary, separated by semicolons. Each key-value pair is formatted as
+    `key_value`. If the input `frequency_dict` is `None`, the function returns `None`. If the resulting
     string is empty, the function also returns `None`.
     """
-    if frequencyDict is None: return None
-    return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
+    if frequency_dict is None: 
+        return None
+    return ";".join([f"{k}_{v}" for k, v in frequency_dict.items()]) or None
 
 @tasks.loop(seconds=1800)
 async def update_status():
+    """
+    This Python function updates the bot's status every 30 minutes with a list of predefined statuses.
+    """
     global activity_task_running
     activity_task_running = True
     
@@ -158,6 +162,11 @@ async def update_status():
     activity_task_running = False
 
 def is_authorised_user():
+    """
+    The function `is_authorised_user` checks if the author of a context is in the list of admin users.
+    :return: A check function is being returned that checks if the author of a command is in the list of
+    ADMIN_USERS.
+    """
     async def predicate(ctx):
         if ctx.author.id in ADMIN_USERS:
             return True
@@ -166,8 +175,12 @@ def is_authorised_user():
 
 @bot.event
 async def on_ready():
+    """
+    The function sets up database tables, checks for debug mode, updates bot status, and sends direct
+    messages to users based on settings.
+    """
     await bot.tree.sync()
-    if update_status.is_running() == False:
+    if update_status.is_running() is False:
         update_status.start()
     
     if DEBUG:
@@ -267,7 +280,17 @@ async def on_ready():
     print(f'Logged in as {bot.user}')    
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
-async def Roll_a_puff(interaction: discord.Interaction):
+async def roll_a_puff(interaction: discord.Interaction):
+    """
+    This function rolls a random puff for a user in a Discord bot, handling rarity, statistics tracking,
+    and generating an embed with the roll results.
+    
+    :param interaction: The `interaction` parameter in the code snippet represents the interaction
+    object that contains information about the user's interaction with the bot. It includes details such
+    as the user who triggered the interaction, the type of interaction (e.g., command invocation), and
+    any options or data provided by the user
+    :type interaction: discord.Interaction
+    """
     await interaction.response.defer()
     # So Discord doesn't time out the interaction
     
@@ -353,7 +376,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     frequency = unpack_rolled_info(rolledGolds)
     
     if isRare >= 2:
-        if frequency == None: frequency = {}
+        if frequency is None: frequency = {}
         ascension = frequency.get(name, -1)
         if ascension < ASCENSION_MAX:
             frequency[name] = ascension+1
@@ -428,6 +451,15 @@ async def Roll_a_puff(interaction: discord.Interaction):
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def statistics(interaction: discord.Interaction):
+    """
+    This Python function retrieves and displays statistics related to a user's rolls in a gacha game
+    using Discord interactions.
+    
+    :param interaction: The `interaction` parameter in the `statistics` command function represents the
+    interaction between the user and the bot. It contains information about the user who triggered the
+    command, the context in which the command was triggered, and allows the bot to respond to the user
+    :type interaction: discord.Interaction
+    """
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
@@ -468,6 +500,8 @@ async def statistics(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
+# This class `DropRatesView` in Python implements a view for displaying drop rates of items with
+# pagination controls in a Discord bot.
 class DropRatesView(discord.ui.View):
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
         super().__init__(timeout=BUTTON_PAGE_EXPIRY)  # Buttons expire after 60 seconds
@@ -513,6 +547,16 @@ class DropRatesView(discord.ui.View):
 
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
 async def drop_rates(interaction: discord.Interaction):
+    """
+    This Python function retrieves data from a SQLite database and calculates the chances for each
+    category of puffs, then sends the information in an embed message.
+    
+    :param interaction: The `interaction` parameter in the code snippet represents the interaction with
+    the user in a Discord context. In this case, it is used to handle the interaction triggered by the
+    user invoking the `/chances` command. The interaction object contains information about the user,
+    the command invoked, and other relevant details
+    :type interaction: discord.Interaction
+    """
     db_path = "assets\\database\\puffs.db" if os.name == "nt" else "assets/database/puffs.db"
     conn = connect(db_path, check_same_thread=False)
     cursor = conn.cursor()
@@ -537,12 +581,31 @@ async def drop_rates(interaction: discord.Interaction):
 
 @bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
 async def suggestions(interaction: discord.Interaction):
+    """
+    The `suggestions` function in the Python code provides a command for users to suggest new ideas for
+    the bot by directing them to a Google Form through an embedded message.
+    
+    :param interaction: The `interaction` parameter in the `suggestions` command represents the
+    interaction that triggered the command. In this case, it is a Discord interaction, which allows the
+    bot to respond to user input or commands in a Discord server
+    :type interaction: discord.Interaction
+    """
     embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
 async def help(interaction: discord.Interaction):
+    """
+    The `help` function in this Python code provides a list of commands and their descriptions for
+    assisting users with the bot's functionalities.
+    
+    :param interaction: The `interaction` parameter in the `help` command function represents the
+    interaction between the user and the bot. It contains information about the user who triggered the
+    command, the context of the interaction, and allows the bot to respond back to the user with
+    messages or embeds
+    :type interaction: discord.Interaction
+    """
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
     embed.add_field(
         name="/puffroll", 
@@ -566,8 +629,19 @@ async def help(interaction: discord.Interaction):
     )
     embed.add_field(
         name="/settings", 
-        value="Use this function to change any settings you want with the bot", 
-        inline=False
+        value="Use this function to change any settings you want with the bot"
+    )
+    embed.add_field(
+        name="/banner",
+        value="Use this function to view the current limited banner that's running"
+    )
+    embed.add_field(
+        name="/github",
+        value="Use this function to view the github repository for this bot"
+    )
+    embed.add_field(
+        name="/compare",
+        value="Use this function to compare your statistics with another user"
     )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -575,6 +649,16 @@ async def help(interaction: discord.Interaction):
 
 @bot.tree.command(name="info", description="Just some good to know information")
 async def information(interaction: discord.Interaction):
+    """
+    The `information` function provides helpful information about rarities, saving data, the gacha
+    system, etc. in a Discord embed format.
+    
+    :param interaction: The `interaction` parameter in the `information` function represents the
+    interaction between the user and the bot. It contains information about the user who triggered the
+    command, the channel where the interaction occurred, and other relevant details needed to respond to
+    the user's command effectively. In this case, it is specifically
+    :type interaction: discord.Interaction
+    """
     embed = discord.Embed(title="Good to know information", color=discord.Color.dark_orange())
     embed.add_field(
         name="Rarities", 
@@ -601,11 +685,17 @@ async def information(interaction: discord.Interaction):
         value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ASCENSION_MAX}** ascension. Please check `/statistics` for what you've ascended",
         inline=False
     )
-    
+    embed.add_field(
+        name="Comparison calculations",
+        value="This works by comparing your rolls to another user, so you can see how lucky you are compared to them. This is done by comparing the amount of rolls, limited rarity puffs, gold rarity puffs, purple rarity puffs, the average pity, and ascensions.\nAlso, the embed color signifies if on average if you have better stats. It's calculated by having each value better as 1 and worse as -1. First it starts with the mean of each ascension together. that value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. (**less** is better for pity/rolls, everything else, **more**) is better\n-# Please check `/statistics` for what you've rolled",
+        inline=False
+    )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
 
+# The `SettingsView` class in Python represents a view for selecting and updating user settings with
+# options to notify about bot startup and Gold/Limited Rarity puff rolls.
 class SettingsView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=SETTINGS_EXPIRY)  # View expires after 60 seconds
@@ -648,6 +738,15 @@ class SettingsView(discord.ui.View):
 
 @bot.tree.command(name="settings", description="Just set up your settings")
 async def settings(interaction: discord.Interaction):
+    """
+    The function sets up user settings in a database and sends a message with options to the user.
+    
+    :param interaction: The `interaction` parameter in your `settings` command function represents the
+    interaction that triggered the command. It contains information about the user who interacted with
+    the bot, the channel where the interaction occurred, and other relevant details. In this case, you
+    are using it to retrieve the user's ID to
+    :type interaction: discord.Interaction
+    """
     user_id = interaction.user.id
     
     db_path = "assets\\database\\users.db" if os.name == "nt" else "assets/database/users.db"
@@ -666,6 +765,16 @@ async def settings(interaction: discord.Interaction):
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
 async def showBanner(interaction: discord.Interaction):
+    """
+    This Python function displays the current limited puff banner with its start and end dates, time
+    remaining, and the user who requested it.
+    
+    :param interaction: The `interaction` parameter in the `showBanner` function represents the
+    interaction between the user and the bot. It contains information about the user who triggered the
+    command, the context of the interaction, and allows the bot to respond back to the user with
+    messages or embeds
+    :type interaction: discord.Interaction
+    """
     now  = int(time())
     start_time = int(mktime(datetime.strptime(BANNER_START, "%m/%d/%Y").timetuple()))
     end_time = int(mktime(datetime.strptime(BANNER_END, "%m/%d/%Y").timetuple()))
@@ -680,10 +789,41 @@ async def showBanner(interaction: discord.Interaction):
 
 @bot.command()
 async def pring(ctx, *, arg):
+    """
+    The above Python function defines a command for a bot that sends a message with the input argument
+    provided by the user.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the context in which the command is
+    being invoked. It contains information about the message, the channel, the author, and other
+    relevant details related to the command execution
+    :param arg: The `arg` parameter in the `pring` command is a variable that represents the input
+    provided by the user when the command is called. It is a string that can contain any text or
+    characters that the user wants to send as a message
+    """
     await ctx.send(arg)
 
 @bot.tree.command(name="compare", description="Compare your rolls to other people!")
 async def comparision(interaction: discord.Interaction, user: discord.Member):
+    """
+    This function compares the puff rolls and statistics of the user invoking the command with another
+    specified user and displays the differences in a formatted embed message.
+    
+    :param interaction: The `interaction` parameter in the `compare` command function represents the
+    interaction that triggered the command. It contains information about the user who triggered the
+    command, the channel where the interaction occurred, and other relevant details related to the
+    interaction. In this context, it is used to retrieve the user ID of
+    :type interaction: discord.Interaction
+    :param user: The `compare` command in your code is designed to compare the stats of the user who
+    triggers the command with the stats of another user specified as the `user` parameter. The command
+    retrieves the stats of both users from a database, calculates the differences in various stats such
+    as rolls, average pity,
+    :type user: discord.Member
+    :return: The `compare` command is returning an embedded message that displays a comparison between
+    the user who triggered the command and the target user specified in the command. The comparison
+    includes information such as the difference in rolls, average pity, limited puffs, gold puffs, and
+    purple puffs between the two users. Additionally, it provides a breakdown of specific puff types
+    where one user has more or less than the
+    """
     client_user_id = interaction.user.id
     target_user_id = user.id
     
@@ -766,17 +906,52 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
 
 @bot.tree.command(name="github", description="Get the GitHub link for this bot")
 async def github(interaction: discord.Interaction):
+    """
+    This Python function sends the GitHub link for the bot to the user in a Discord interaction.
+    
+    :param interaction: The `interaction` parameter in the code snippet represents the interaction
+    object that contains information about the user's interaction with the bot, such as the user who
+    triggered the command, the channel where the interaction occurred, and any options or data provided
+    by the user. In this specific context, it is used to
+    :type interaction: discord.Interaction
+    """
     embed = discord.Embed(title="Github", color=discord.Color.random())
     embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{GIT_USERNAME}/{GIT_REPO}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.command()
-async def skater(ctx, *, arg): 
+async def skater(ctx, *, arg):
+    """
+    The function sends a message with the input argument followed by a skater emoji.
+    
+    :param ctx: ctx represents the context in which the command is being invoked. It contains
+    information about the message, the channel, the author, and other relevant details that can be used
+    to interact with the user or perform actions within the Discord server
+    :param arg: The `arg` parameter in the `skater` command represents the input provided by the user
+    when invoking the command. It can be any text or phrase that the user wants to send along with the
+    command
+    """
     await ctx.send(arg + " <:skater:1345246453911781437>")
+
+### All the functions below this comment are for the developer/bot admin users only ###
 
 @bot.command()
 @is_authorised_user()
 async def get(ctx, *, arg: ToLowerConverter):
+    """
+    This function retrieves information about a specific item or character and displays it in an
+    embedded message, including details like name, description, rarity, and image.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
+    being invoked. It contains information about the message, the channel, the author of the message,
+    and other relevant details needed to process the command effectively
+    :param arg: The `arg` parameter in the code snippet represents the input argument provided by the
+    user when invoking the `get` command. This argument is passed as a string and is converted to
+    lowercase using the `ToLowerConverter`
+    :type arg: ToLowerConverter
+    :return: The code snippet provided is a Discord bot command function that retrieves information
+    about a specific item or banner based on the input argument.
+    """
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
         embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
@@ -820,6 +995,16 @@ async def get(ctx, *, arg: ToLowerConverter):
 @bot.command()
 @is_authorised_user()
 async def activity_change(ctx):
+    """
+    This Python function checks if an activity task is already running, restarts it if not, and sends a
+    message indicating the status change.
+    
+    :param ctx: ctx stands for Context, which represents the context in which a command is being
+    invoked. It contains information about the message, the channel, the author of the message, and
+    more. In Discord.py, it is used to interact with the Discord API and send responses back to the user
+    :return: If the `activity_task_running` flag is `True`, the bot will send a message saying "Activity
+    task is running right now, please try again" and then return without restarting the activity task.
+    """
     global activity_task_running
     
     if activity_task_running:
@@ -832,6 +1017,17 @@ async def activity_change(ctx):
 @bot.command()
 @is_authorised_user()
 async def statsof(ctx, arg: discord.User):
+    """
+    This function retrieves and displays statistics related to a user's activity in a puff gacha game.
+    
+    :param ctx: ctx represents the context in which a command is being invoked. It provides information
+    about the message, the channel, the author, and more. In this case, it is used to send a response
+    back to the user who triggered the command
+    :param arg: The `arg` parameter in the code snippet represents a Discord user object that is passed
+    as an argument when the command is invoked. This parameter is used to fetch the statistics of the
+    specified user from the database and display them in an embedded message
+    :type arg: discord.User
+    """
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     
     cursor = conn.cursor()
@@ -875,6 +1071,21 @@ async def statsof(ctx, arg: discord.User):
 @bot.command()
 @is_authorised_user()
 async def createacct(ctx, table, arg: discord.User):
+    """
+    This Python function creates an account for a specified user in a specified table within a database,
+    checking if the account already exists before insertion.
+    
+    :param ctx: The `ctx` parameter in the `createacct` command function represents the context in which
+    the command was invoked. It contains information about the message, the channel, the author of the
+    message, and other relevant details needed to process and respond to the command effectively
+    :param table: The `table` parameter in the `createacct` command represents the name of the table in
+    the database where the user account information will be stored. When the command is executed, a new
+    entry will be added to this table with the user's ID as the username
+    :param arg: The `arg` parameter in the `createacct` command is expecting a Discord user object as
+    input. This user object will be used to create an account for the specified user in the specified
+    table in the database
+    :type arg: discord.User
+    """
     user_id = arg.id
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -889,6 +1100,23 @@ async def createacct(ctx, table, arg: discord.User):
 @bot.command()
 @is_authorised_user()
 async def deleteacct(ctx, table, arg: discord.User):
+    """
+    This Python function deletes a user account from a specified table in a database based on the user's
+    ID.
+    
+    :param ctx: The `ctx` parameter in the `deleteacct` command function represents the context in which
+    the command was invoked. It contains information about the message, the channel, the author of the
+    message, and more. This context is essential for interacting with the Discord API and sending
+    responses back to the user who
+    :param table: The `table` parameter in the `deleteacct` command represents the name of the table
+    from which you want to delete the account. It is a required parameter that specifies the table in
+    the database where the user account information is stored. When calling this command, you need to
+    provide the name of the
+    :param arg: The `arg` parameter in the `deleteacct` command is expecting a Discord user object as
+    input. This user object will be used to identify the account to be deleted from the specified table
+    in the database
+    :type arg: discord.User
+    """
     user_id = arg.id
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -903,6 +1131,18 @@ async def deleteacct(ctx, table, arg: discord.User):
 @bot.command()
 @is_authorised_user()
 async def getdata(ctx, *, arg:ToLowerConverter):
+    """
+    This Python function retrieves data from a SQLite database based on a given argument, constructs an
+    embed with the retrieved information, and sends it as a message in a Discord channel.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
+    being invoked. It contains information about the message, the channel, the author, and other
+    relevant details needed to process the command within a Discord bot
+    :param arg: The `arg` parameter in the `getdata` command is used to specify the name of the image
+    file (without the extension) that corresponds to the data you want to retrieve. This parameter is
+    passed as an argument to the command and is converted to lowercase using the `ToLowerConverter`
+    :type arg: ToLowerConverter
+    """
     file = str(arg) + ".png"
     conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
     cursor = conn.cursor()
@@ -930,6 +1170,14 @@ async def getdata(ctx, *, arg:ToLowerConverter):
 @bot.command()
 @is_authorised_user()
 async def devdocs(ctx):
+    """
+    This function sends a Discord embed message containing information about developer documentation and
+    commands to authorized users.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the context in which the command is
+    being invoked. It contains information about the message, the channel, the author of the message,
+    and other relevant details needed to process the command within the Discord environment
+    """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
     embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user", inline=False)
@@ -939,6 +1187,18 @@ async def devdocs(ctx):
 
 @bot.event
 async def on_command_error(ctx, error):
+    """
+    This Python function prints a message when a user without the necessary permissions tries to use an
+    admin command.
+    
+    :param ctx: The `ctx` parameter in the `on_command_error` event represents the context in which the
+    command error occurred. It contains information about the message, the channel, the author of the
+    command, and more
+    :param error: The `error` parameter in the `on_command_error` event handler represents the error
+    that occurred when a command raised an exception. In the provided code snippet, the event handler
+    specifically checks if the error is an instance of `commands.CheckFailure`, which typically occurs
+    when a command check fails (e.g
+    """
     if isinstance(error, commands.CheckFailure):# Would only be for admin commands right now
         print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
 
