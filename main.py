@@ -16,22 +16,24 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 ADMIN_USERS = set(map(int,os.getenv("ADMIN_USERS", "").split(",")))
 
 ### Control variables
-STOP_PING_ON_STARTUP = False
-DEBUG = False
-pity_limit = 200
-git_username = "TurtleGod7"
-git_repo = "Strawberry-Puff-Bot"
-button_page_expiry = 60
-items_per_page = 5
-settings_expiry = 60
-ascension_max = 10
-avatar_path = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/puffs/strawberry.png" # This and banner to be used when setting it as a gif
-banner_file = "banner_angel.gif"
-banner_start = "3/2/2025"
-banner_end = "4/1/2025"
-rarityWeights = [.887, .083, .03]
-limitedWeights = [.8, .2]
-statuses = [
+CHANGE_PROFILE = False
+STOP_PING_ON_STARTUP = True
+DEBUG = True
+TABLE_CREATION = False
+PITY_LIMIT = 200
+GIT_USERNAME = "TurtleGod7"
+GIT_REPO = "Strawberry-Puff-Bot"
+BUTTON_PAGE_EXPIRY = 60
+ITEMS_PER_PAGE = 5
+SETTINGS_EXPIRY = 60
+ASCENSION_MAX = 10
+AVATAR_PATH = "assets\\puffs\\strawberry.png" if os.name == "nt" else "assets/puffs/strawberry.png" # This and banner to be used when setting it as a gif
+BANNER_FILE = "banner_angel.gif"
+BANNER_START = "3/2/2025"
+BANNER_END = "4/1/2025"
+RARITY_WEIGHTS = [.887, .083, .03]
+LIMITED_WEIGHTS = [.8, .2]
+STATUSES = [
     discord.Activity(type=discord.ActivityType.playing, name="with puffs", state="The puff is one of the cutest animals in the animal kingdom. They are known for how fluffy they are and make as great pillows"),
     discord.Activity(type=discord.ActivityType.watching, name="over the puff kingdom", state="There's lots of land that the king puff has to manage, if only he paid me to do it."),
     discord.Activity(type=discord.ActivityType.watching, name="for the next fairy puff", state="I heard that they're really rare, but I'm sure you'll get it soon"),
@@ -43,41 +45,23 @@ statuses = [
 
 ### Global Variables that DON'T need to be changed
 weightsMultipier = {
-    0 : rarityWeights[0],
-    1 : rarityWeights[1],
-    2 : rarityWeights[2]*limitedWeights[0],
-    3 : rarityWeights[2]*limitedWeights[1],
-    4 : limitedWeights[0], # When pity hits 100
-    5 : limitedWeights[1], 
+    0 : RARITY_WEIGHTS[0],
+    1 : RARITY_WEIGHTS[1],
+    2 : RARITY_WEIGHTS[2]*LIMITED_WEIGHTS[0],
+    3 : RARITY_WEIGHTS[2]*LIMITED_WEIGHTS[1],
+    4 : LIMITED_WEIGHTS[0], # When pity hits 100
+    5 : LIMITED_WEIGHTS[1], 
 }
 activity_task_running = False
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
-'''
-from flask import Flask
-import threading
-
-# Initialize Flask and the bot
-app = Flask(__name__)
-
-# Define a simple route for UptimeRobot
-@app.route('/')
-def index():
-    return "Bot is running!"
-
-# Start the Flask server in a separate thread
-def run_flask():
-    app.run(host="0.0.0.0", port=80)
-
-# Start Flask in a separate thread to avoid blocking the bot
-thread = threading.Thread(target=run_flask)
-thread.start()
-'''
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
+# lowercase.
 class ToLowerConverter(commands.Converter):
     async def convert(self, ctx, argument):
         if not isinstance(argument, str):
@@ -85,6 +69,20 @@ class ToLowerConverter(commands.Converter):
         return argument.lower()
 
 async def dm_ping(user_id: int, message: str):
+    """
+    The function `dm_ping` sends a direct message to a user with a specified message, handling
+    exceptions for user not found or permission issues.
+    
+    :param user_id: The `user_id` parameter is an integer representing the unique identifier of the user
+    to whom you want to send a direct message (DM)
+    :type user_id: int
+    :param message: The `message` parameter is a string that contains the message you want to send to
+    the user via direct message
+    :type message: str
+    :return: If an error occurs while fetching the user or sending the direct message, the function will
+    return without performing the DM action. If the user is not found (user is None), the function will
+    also return without sending the message.
+    """
     try:
         user = await bot.fetch_user(user_id)
     except Exception as e:
@@ -101,7 +99,24 @@ async def dm_ping(user_id: int, message: str):
     except discord.HTTPException as e:
         print(f'Error sending DM as {e}')
 
-def unpack_rolled_info(rollInfo: str, returndictempty=False):
+def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
+    """
+    The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
+    semicolons, extracts the keys and values, and returns a dictionary sorted by keys.
+    
+    :param rollInfo: The `rollInfo` parameter is a string that contains information about rolled items
+    and their frequencies. Each item and its frequency are separated by an underscore, and each item is
+    separated by a semicolon
+    :type rollInfo: str
+    :param returndictempty: The `returndictempty` parameter in the `unpack_rolled_info` function is a
+    boolean parameter with a default value of `False`. If this parameter is set to `True`, the function
+    will return an empty dictionary `{}` if the `rollInfo` input is `None`. This, defaults to False
+    :type returndictempty: bool (optional)
+    :return: The function `unpack_rolled_info` is returning a dictionary containing the frequency of
+    each item in the input `rollInfo` string. The items in the dictionary are sorted alphabetically by
+    key. If the `returndictempty` parameter is set to `True` and `rollInfo` is `None`, an empty
+    dictionary is returned. If `rollInfo` is `None` without
+    """
     if returndictempty and rollInfo == None:
         return {}
     if rollInfo == None:
@@ -115,6 +130,19 @@ def unpack_rolled_info(rollInfo: str, returndictempty=False):
     return dict(sorted(frequency.items()))
 
 def pack_rolled_info(frequencyDict: dict):
+    """
+    The function `pack_rolled_info` takes a dictionary `frequencyDict` as input and returns a string
+    representation of the key-value pairs in the dictionary separated by semicolons.
+    
+    :param frequencyDict: The `frequencyDict` parameter is a dictionary that contains the frequency of
+    rolled items. Each key in the dictionary represents an item, and the corresponding value represents
+    the frequency of that item being rolled
+    :type frequencyDict: dict
+    :return: The function `pack_rolled_info` returns a string that contains key-value pairs from the
+    input `frequencyDict` dictionary, separated by semicolons. Each key-value pair is formatted as
+    `key_value`. If the input `frequencyDict` is `None`, the function returns `None`. If the resulting
+    string is empty, the function also returns `None`.
+    """
     if frequencyDict is None: return None
     return ";".join([f"{k}_{v}" for k, v in frequencyDict.items()]) or None
 
@@ -123,8 +151,8 @@ async def update_status():
     global activity_task_running
     activity_task_running = True
     
-    current_status = statuses.pop(0)
-    statuses.append(current_status)
+    current_status = STATUSES.pop(0)
+    STATUSES.append(current_status)
     await bot.change_presence(activity=current_status)
     
     activity_task_running = False
@@ -139,100 +167,102 @@ def is_authorised_user():
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    update_status.start()
+    if update_status.is_running() == False:
+        update_status.start()
     
     if DEBUG:
         print("Registered commands:")
         for command in bot.tree.get_commands():
             print(f" - {command.name}")
-        
         print(f"DEBUG: Admin Users: {ADMIN_USERS}")
     
-    ''' Remove this when you want to run it (it makes the bot slower when I already have the data)
-    conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
+    if TABLE_CREATION:
+        conn = connect("assets\\database\\puffs.db") if os.name == "nt" else connect("assets/database/puffs.db")
+        
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS puffs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            imagepath TEXT NOT NULL UNIQUE,
+            weight REAL,
+            isRare NUMERIC NOT NULL DEFAULT 0
+        )
+        """)
+        
+        cursor.execute("PRAGMA journal_mode=WAL")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
     
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS puffs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL,
-        imagepath TEXT NOT NULL UNIQUE,
-        weight REAL,
-        isRare NUMERIC NOT NULL DEFAULT 0
-    )
-    """)
-    
-    cursor.execute("PRAGMA journal_mode=WAL")
-    
-    conn.commit()
-    cursor.close()
-    conn.close()
-    '''
     conn = connect("assets\\database\\users.db") if os.name == "nt" else connect("assets/database/users.db")
-    
     cursor = conn.cursor()
-    ''' Same here
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS stats (
-        "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-        "rolls" INTEGER DEFAULT 0,
-        "limited" INTEGER DEFAULT 0,
-        "gold" rolls INTEGER DEFAULT 0,
-        "purple" INTEGER DEFAULT 0,
-        "rolledGolds" TEXT,
-        "avgPity" REAL DEFAULT 0
-    )               
-    """)
     
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS pity (
-        "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-        "pity" INTEGER NOT NULL DEFAULT 0
-    )               
-    """)
+    if TABLE_CREATION:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stats (
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "rolls" INTEGER DEFAULT 0,
+            "limited" INTEGER DEFAULT 0,
+            "gold" rolls INTEGER DEFAULT 0,
+            "purple" INTEGER DEFAULT 0,
+            "rolledGolds" TEXT,
+            "avgPity" REAL DEFAULT 0
+        )               
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pity (
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "pity" INTEGER NOT NULL DEFAULT 0
+        )               
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "DMonStartup" INTEGER NOT NULL DEFAULT 0
+        )               
+        """)
+        
+        cursor.execute("PRAGMA journal_mode=WAL")
+        
+        conn.commit()
     
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS settings (
-        "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-        "DMonStartup" INTEGER NOT NULL DEFAULT 0
-    )               
-    """)
-    
-    cursor.execute("PRAGMA journal_mode=WAL")
-    
-    conn.commit()
-    '''
     PeopletoDM = []
     if not STOP_PING_ON_STARTUP:
         cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
         PeopletoDM = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
     for k in PeopletoDM:
         await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
     
-    if not os.path.exists(avatar_path):
-        print("avatar .gif isn't found")
-    else:
-        with open(avatar_path, "rb") as f:
-            avatar_img = f.read()
-            try:
-                await bot.user.edit(avatar=avatar_img) # type: ignore
-            except Exception as e:
-                print(f'{e}')
+    if CHANGE_PROFILE:
+        if not os.path.exists(AVATAR_PATH):
+            print("avatar .gif isn't found")
+        else:
+            with open(AVATAR_PATH, "rb") as f:
+                avatar_img = f.read()
+                try:
+                    await bot.user.edit(avatar=avatar_img) # type: ignore
+                except Exception as e:
+                    print(f'{e}')
     
-    if not os.path.exists(f"assets\\profile\\{banner_file}" if os.name == "nt" else f"assets/profile/{banner_file}"):
-        print("banner .gif isn't found")
-    else:
-        with open(f"assets\\profile\\{banner_file}" if os.name == "nt" else f"assets/profile/{banner_file}", "rb") as f:
-            banner_img = f.read()
-            try:
-                await bot.user.edit(banner=banner_img) # type: ignore
-            except Exception as e:
-                print(f'{e}')
+        if not os.path.exists(f"assets\\profile\\{BANNER_FILE}" if os.name == "nt" else f"assets/profile/{BANNER_FILE}"):
+            print("banner .gif isn't found")
+        else:
+            with open(f"assets\\profile\\{BANNER_FILE}" if os.name == "nt" else f"assets/profile/{BANNER_FILE}", "rb") as f:
+                banner_img = f.read()
+                try:
+                    await bot.user.edit(banner=banner_img) # type: ignore
+                except Exception as e:
+                    print(f'{e}')
     
     print(f'Logged in as {bot.user}')    
 
@@ -242,9 +272,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     # So Discord doesn't time out the interaction
     
     user_id = interaction.user.id
-
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
-
     cursor = conn.cursor()
     
     cursor.execute("SELECT pity FROM pity WHERE username = ?", (user_id,))
@@ -264,8 +292,8 @@ async def Roll_a_puff(interaction: discord.Interaction):
 
     cursor = conn.cursor()
     
-    if int(pity) < pity_limit:
-        isRareval = choices([0,1,2], weights=rarityWeights, k=1)[0]
+    if int(pity) < PITY_LIMIT:
+        isRareval = choices([0,1,2], weights=RARITY_WEIGHTS, k=1)[0]
         if isRareval < 2:
             cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
             data =  cursor.fetchall()
@@ -277,7 +305,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
             cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRareval,))
             total_weight = cursor.fetchone()[0]
         else:
-            isLimitedval = choices([2,3], weights=limitedWeights, k=1)[0]
+            isLimitedval = choices([2,3], weights=LIMITED_WEIGHTS, k=1)[0]
             cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
             data =  cursor.fetchall()
             items, weights = zip(*data) # Randomly selects a weighted role (id)
@@ -292,7 +320,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         cursor.close() # Gets info for the chance calculation
         conn.close()
     else:
-        isLimitedval = choices([2,3], weights=limitedWeights, k=1)[0]
+        isLimitedval = choices([2,3], weights=LIMITED_WEIGHTS, k=1)[0]
         cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
         data =  cursor.fetchall()
         items, weights = zip(*data) # Randomly selects a weighted role (id)
@@ -300,7 +328,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         cursor.execute("SELECT * FROM puffs WHERE id = ?", (selected_id,))
         choice = cursor.fetchone() # Gets the full info from the id 
         
-        cursor.execute("SELECT SUM(CAST(weight AS REAL)) FROM puffs WHERE isRare = ?", (isLimitedval,))
+        cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
         total_weight = cursor.fetchone()[0]
         
         isRareval = isLimitedval+2
@@ -327,7 +355,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
     if isRare >= 2:
         if frequency == None: frequency = {}
         ascension = frequency.get(name, -1)
-        if ascension < ascension_max:
+        if ascension < ASCENSION_MAX:
             frequency[name] = ascension+1
         frequency = dict(sorted(frequency.items()))
     
@@ -346,7 +374,10 @@ async def Roll_a_puff(interaction: discord.Interaction):
         
         cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
         avgPity = cursor.fetchone()[0]
-        cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
+        if avgPity == 0:
+            cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (avgPity,pity, user_id))
+        else:
+            cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
     
     if int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
@@ -374,7 +405,7 @@ async def Roll_a_puff(interaction: discord.Interaction):
         1 : "st",
         2 : "nd"
     }
-    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{image_path}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -439,14 +470,14 @@ async def statistics(interaction: discord.Interaction):
 
 class DropRatesView(discord.ui.View):
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
-        super().__init__(timeout=button_page_expiry)  # Buttons expire after 60 seconds
+        super().__init__(timeout=BUTTON_PAGE_EXPIRY)  # Buttons expire after 60 seconds
         self.items = items
         self.total_weight0 = total_weight0
         self.total_weight1 = total_weight1
         self.total_weight2 = total_weight2
         self.total_weight3 = total_weight3
         self.page = 0
-        self.items_per_page = items_per_page  # Adjust if needed
+        self.items_per_page = ITEMS_PER_PAGE  # Adjust if needed
 
     def generate_embed(self):
         isRaretoWeight = {0:self.total_weight0, 1:self.total_weight1, 2:self.total_weight2, 3:self.total_weight3,}
@@ -557,17 +588,17 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Gacha system",
-        value=f"This system works by initially rolling for the rarity at weights of **{rarityWeights[2]*100}**%, **{rarityWeights[1]*100}**%, and **{rarityWeights[0]*100}**% from least common to common rarities. Then if you roll in the {rarityWeights[2]*100}%, there is another roll to decide if you will get a limited which is at **{limitedWeights[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
+        value=f"This system works by initially rolling for the rarity at weights of **{RARITY_WEIGHTS[2]*100}**%, **{RARITY_WEIGHTS[1]*100}**%, and **{RARITY_WEIGHTS[0]*100}**% from least common to common rarities. Then if you roll in the {RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited which is at **{LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
         inline=False
     )
     embed.add_field(
         name="Pity system",
-        value=f"When you reach **{pity_limit}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function",
+        value=f"When you reach **{PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function",
         inline=False
     )
     embed.add_field(
         name="Ascensions",
-        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ascension_max}** ascension. Please check `/statistics` for what you've ascended",
+        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ASCENSION_MAX}** ascension. Please check `/statistics` for what you've ascended",
         inline=False
     )
     
@@ -577,7 +608,7 @@ async def information(interaction: discord.Interaction):
 
 class SettingsView(discord.ui.View):
     def __init__(self, user_id):
-        super().__init__(timeout=settings_expiry)  # View expires after 60 seconds
+        super().__init__(timeout=SETTINGS_EXPIRY)  # View expires after 60 seconds
         self.user_id = user_id
     
     @discord.ui.select(
@@ -636,13 +667,13 @@ async def settings(interaction: discord.Interaction):
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
 async def showBanner(interaction: discord.Interaction):
     now  = int(time())
-    start_time = int(mktime(datetime.strptime(banner_start, "%m/%d/%Y").timetuple()))
-    end_time = int(mktime(datetime.strptime(banner_end, "%m/%d/%Y").timetuple()))
+    start_time = int(mktime(datetime.strptime(BANNER_START, "%m/%d/%Y").timetuple()))
+    end_time = int(mktime(datetime.strptime(BANNER_END, "%m/%d/%Y").timetuple()))
     delta_time = end_time - now
     delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
     
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-    embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{banner_file}?=raw")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/profile/{BANNER_FILE}?=raw")
     embed.add_field(name="Banner Dates", value=f"Start: <t:{start_time}:F>\nEnd: <t:{end_time}:F>\nTime till end: {delta_time}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -736,11 +767,11 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
 @bot.tree.command(name="github", description="Get the GitHub link for this bot")
 async def github(interaction: discord.Interaction):
     embed = discord.Embed(title="Github", color=discord.Color.random())
-    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{git_username}/{git_repo}")
+    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{GIT_USERNAME}/{GIT_REPO}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.command()
-async def skater(ctx, *, arg):
+async def skater(ctx, *, arg): 
     await ctx.send(arg + " <:skater:1345246453911781437>")
 
 @bot.command()
@@ -748,7 +779,7 @@ async def skater(ctx, *, arg):
 async def get(ctx, *, arg: ToLowerConverter):
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-        embed.set_image(url=f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
+        embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
@@ -759,8 +790,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     cursor.execute("SELECT name, description, isRare FROM puffs WHERE imagepath = ?", (file,))
     name, description, isRare = cursor.fetchone()
     cursor.close()
-    conn.close()
-    
+    conn.close()  
     rareColors = {
         0 : discord.Color.blue(),
         1 : discord.Color.purple(),
@@ -769,7 +799,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     }
     chance = 100
     pity = None
-    image_path = f"https://raw.githubusercontent.com/{git_username}/{git_repo}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
     
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -783,7 +813,7 @@ async def get(ctx, *, arg: ToLowerConverter):
             value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
         )
     embed.set_image(url=image_path)
-    embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     
     await ctx.send(embed=embed)
 
@@ -799,6 +829,114 @@ async def activity_change(ctx):
     update_status.restart()
     await ctx.send("Activity task has been changed", ephemeral=True)
 
+@bot.command()
+@is_authorised_user()
+async def statsof(ctx, arg: discord.User):
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    
+    cursor = conn.cursor()
+    
+    user_id = arg.id
+    
+    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))    
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO stats (username, rolls, limited, gold, purple, rolledGolds, avgPity) VALUES (?, ?, ?, ?, ?, ?)", (user_id, 0, 0, 0, 0, None, 0))
+        conn.commit()
+    
+    cursor.execute("SELECT * FROM stats WHERE username = ?", (user_id,))
+    choice = cursor.fetchone()
+    
+    username, rolls,limited, gold, purple, rolledGolds, avgPity = choice
+    
+    cursor.close()
+    conn.close()
+    
+    frequency = {}
+    if None != rolledGolds:
+        split_by_puffs = rolledGolds.split(";")
+        for split in split_by_puffs:
+            frequency[split.split("_")[0]] = int(split.split("_")[1])
+    
+    ascensions_description_string = ""
+    for k, v in frequency.items():
+        ascensions_description_string += f"* *{k}*  **{v}** {'time' if v == 1 else 'times'}\n"
+    if ascensions_description_string == "":
+        ascensions_description_string += "You're seeing this because they didn't roll any gold/limited rarity puffs :sob:"
+    
+    embed = discord.Embed(title=f"{arg.display_name.capitalize()} Puff Gacha statistics", color=discord.Color.blurple())
+    embed.add_field(name="Total Rolls", value=f"They've rolled **{rolls}** times!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"They've also ~~pulled~~ rolled a limited rarity puff **{limited}** {'time' if limited == 1 else 'times'}, a gold rarity puff **{gold}** {'time' if gold == 1 else 'times'}, and a purple rarity puff **{purple}** {'time' if purple == 1 else 'times'}!", inline=False)
+    embed.add_field(name="Average Pity", value=f"Their average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
+    embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
+    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+@is_authorised_user()
+async def createacct(ctx, table, arg: discord.User):
+    user_id = arg.id
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE username = ?)", (user_id,))
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(f"INSERT INTO {table} (username) VALUES (?)", (user_id,))
+        conn.commit()
+        await ctx.send(f"Account created for {arg.display_name} in {table}")
+    cursor.close()
+    conn.close()
+
+@bot.command()
+@is_authorised_user()
+async def deleteacct(ctx, table, arg: discord.User):
+    user_id = arg.id
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE username = ?)", (user_id,))
+    if cursor.fetchone()[0] == 1:
+        cursor.execute(f"DELETE FROM {table} (username) VALUES (?)", (user_id,))
+        conn.commit()
+        await ctx.send(f"Account deleted for {arg.display_name} in {table}")
+    cursor.close()
+    conn.close()
+
+@bot.command()
+@is_authorised_user()
+async def getdata(ctx, *, arg:ToLowerConverter):
+    file = str(arg) + ".png"
+    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os.name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, description, isRare FROM puffs WHERE imagepath = ?", (file,))
+    name, description, isRare = cursor.fetchone()
+    cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRare,))
+    rarityWeight = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()  
+    
+    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    weightString = f"{rarityWeight*weightsMultipier.get(isRare)}%"
+    if isRare >= 2:
+        weightString += f" and {weightsMultipier.get(isRare+2)}%"
+    
+    embed = discord.Embed(title="Puff Info", color=discord.Color.darker_grey())
+    embed.add_field(name="Name", value=name, inline=False)
+    embed.add_field(name="Description", value=description, inline=False)
+    embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
+    embed.add_field(name="Chance", value=weightString, inline=False)
+    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
+    embed.set_image(url=image_path)
+    await ctx.send(embed=embed)
+
+@bot.command()
+@is_authorised_user()
+async def devdocs(ctx):
+    embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
+    embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user", inline=False)
+    embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
+    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
+    await ctx.send(embed=embed)
+
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CheckFailure):# Would only be for admin commands right now
@@ -806,4 +944,3 @@ async def on_command_error(ctx, error):
 
 # add pvp fucntion
 bot.run(TOKEN) # type: ignore
-

@@ -54,25 +54,24 @@ Please ensure your Python version is 3.6.X and greater[^1]. The code will not ru
 
     - Preferably make this in a venv named `.venv`[^2]
 
-4. Change personal information (Optional)
-
-    Change personal information about your repository in `main.py` in the `### Control Variables` section at the top (lines 18 & 19)[^3]
-
-    ```python
-    git_username = "Your_Github_Username"
-    git_repo = "Your_Github_Repository_Name"
-    ```
-
 ## Usage
 
-1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^4] and Admin users:
+1. Create a `.env` file in the root directory of the repository and add your Discord bot token[^3] and Admin users:
 
     ```env
     DISCORD_TOKEN=your_token_here
     ADMIN_USERS=discord_user_id_1,discord_user_id_2,etc.
     ```
 
-2. Remove the multi-line comments under the `on_ready()` function for your first time running bot (they may be added back later)
+2. Change Flags (Optional)
+
+    Change personal information about your repository in `main.py` in the `### Control Variables` section at the top[^4] and change TABLE_CREATION variable to True if you want to wipe the previous data[^5]
+
+    ```python
+    TABLE_CREATION = True
+    GIT_USERNAME = "Your_Github_Username"
+    GIT_REPO = "Your_Github_Repository_Name"
+    ```
 
 3. Start the bot:
 
@@ -100,6 +99,10 @@ The code was written by @TurtleGod7 and the puffs were drawn and created by @orc
 
 [^2]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
 
-[^3]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+[^3]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
 
-[^4]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
+[^4]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+
+[^5]: If you want to wipe any data, make sure you create two databases at these file paths (relative):
+    assets/database/puffs.db (HIGHLY UNRECOMMEND)
+    assets/database/users.db
