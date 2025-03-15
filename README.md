@@ -24,6 +24,7 @@ This bot is live and is available for you to add to your Discord server whenever
 ### Bot Install Links
 
 - [User Install](https://discord.com/oauth2/authorize?client_id=1338650603617910817&integration_type=1&scope=applications.commands)
+
 - [Guild (Server) Install](https://discord.com/oauth2/authorize?client_id=1338650603617910817&permissions=277025507328&integration_type=0&scope=bot)
 
 The bot's discord username is `Strawberry Puff Bot#3856` and its App ID is `1338650603617910817`. Please use this if you need help verifying my bot. Also on the bot's profile the "Copy Link" option links to the Guild Install link provided above.
@@ -95,7 +96,7 @@ For any questions or suggestions, please open an issue or contact me.
 
 The code was written by @TurtleGod7 and the puffs were drawn and created by @orckadork.
 
-[^1]: I've only tested this code on python 3.9.6 on my Mac but in theory it should work on 3.6.X and greater.
+[^1]: I've only tested this code on python 3.9.6 on my Mac but in theory it should work on 3.7.X and greater.
 
 [^2]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
 
@@ -106,3 +107,5 @@ The code was written by @TurtleGod7 and the puffs were drawn and created by @orc
 [^5]: If you want to wipe any data, make sure you create two databases at these file paths (relative):
     assets/database/puffs.db (HIGHLY UNRECOMMEND)
     assets/database/users.db
+
+<script src='https://cdn.jsdelivr.net/gh/eddymens/markdown-external-link-script@v2.0.0/main.min.js'></script>
