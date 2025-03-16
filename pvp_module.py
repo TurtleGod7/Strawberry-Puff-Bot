@@ -148,11 +148,10 @@ def get_owned(user_id=None):
     This Python function retrieves owned stats for a specific user from a database and returns the
     unpacked rolled information.
     
-    :param user_id: The `get_owned` function retrieves the rolled golds and normals stats for a specific
-    user from a database. The `user_id` parameter is used to specify the username for which the stats
-    are being retrieved
-    :return: The function `get_owned` is returning the result of calling the function
-    `unpack_rolled_info` with the argument `packedStats`.
+    :param user_id: The get_owned function retrieves the rolled golds and normals stats for a specific
+    user from a database. The user_id parameter is used to specify the username for which the stats are being retrieved
+    :return: The function get_owned is returning a dictionary with the result of calling the
+    function unpack_rolled_info with the argument packedStats
     """
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
@@ -167,19 +166,22 @@ def get_owned(user_id=None):
     conn.close()
     return unpack_rolled_info(packedStats) # type: ignore
 
-def battle(puff1, puff2):
+def battle(puff1: Puff, puff2: Puff):
     """
-    The function `battle` simulates a battle between two characters by reducing their health points
-    based on their attack power until one of them loses all health points.
+    This Python function simulates a battle between two Puff objects by reducing their health based on
+    their attack values until one of them wins or it's a draw.
     
-    :param puff1: The `battle` function takes two parameters, `puff1` and `puff2`, which represent two
-    characters or entities engaging in a battle. The function simulates a turn-based battle between
-    these two entities until one of them runs out of health
-    :param puff2: It seems like you have not provided the details for the `puff2` parameter. Could you
-    please provide the necessary information for `puff2` so that I can assist you further with the
-    `battle` function?
-    :return: The `battle` function returns a message indicating the winner of the battle along with
-    their level and owner, or "⚔️ It's a draw!" if the battle ends in a draw.
+    :param puff1: Puff object representing the first creature in the battle. It has attributes like
+    name, health, attack, level, and owner
+    :type puff1: Puff
+    :param puff2: Puff 2 is an instance of the Puff class, representing a character or creature in a
+    battle. It has attributes such as health, attack power, name, level, and owner. In the battle
+    function, puff2's health is reduced by puff1's attack power in each round of
+    :type puff2: Puff
+    :return: The `battle` function returns a tuple containing a message indicating the outcome of the
+    battle and an integer value representing the result. The message can be one of the following:
+    - If both `puff1` and `puff2` have health less than or equal to 0, it returns "⚔️ It's a draw!
+    (puff1.name vs puff2.name)"
     """
     while puff1.health > 0 and puff2.health > 0:
         puff2.health -= puff1.attack
@@ -190,5 +192,4 @@ def battle(puff1, puff2):
             return f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1
         if puff1.health <= 0:
             return f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1
-
-    return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0
+    return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0 # Catch all

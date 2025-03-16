@@ -5,8 +5,9 @@ from sqlite3 import connect # If you want to change the format to JSON, go for i
 from statistics import mean
 from math import ceil, floor
 from time import time, mktime
-import pvp_module
 from datetime import datetime
+from turtle import title
+import pvp_module
 import discord
 from discord.ext import commands
 from discord.ext import tasks
@@ -43,6 +44,8 @@ STATUSES = [
     discord.Activity(type=discord.ActivityType.watching, name="you use `/help` when you need help", state="It's always there to help you whenever you're lost. Try going to a server with me in it to see what I can do"),
     discord.Activity(type=discord.ActivityType.competing, name="for max ascension puffs", state="I heard that the max ascension puff is rare to have. If only spamming this bot wasn't allowed, it would be even rarer"),
 ]
+COOLDOWN_TIME = 30  # Cooldown in seconds
+
 ###
 
 ### Global Variables that DON'T need to be changed
@@ -59,7 +62,14 @@ weightedColor = {
     0: discord.Color.yellow(),
     1: discord.Color.brand_green(),
 }
+rareColors = {
+        0 : discord.Color.blue(),
+        1 : discord.Color.purple(),
+        2 : discord.Color.gold(),
+        3 : discord.Color.greyple()
+    }
 activity_task_running = False
+puff_list = []
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 
@@ -180,6 +190,24 @@ def is_authorised_user():
         return False
     return commands.check(predicate)
 
+def flatten_list(nested_list):
+    """
+    The `flatten_list` function recursively flattens a nested list into a single flat list.
+    
+    :param nested_list: The `flatten_list` function takes a nested list as input and recursively
+    flattens it into a single list. If the input list contains nested lists or tuples, it will flatten those as
+    well
+    :return: The function `flatten_list` returns a flattened version of the input nested list by
+    recursively flattening any nested lists within it.
+    """
+    flat_list = []
+    for item in nested_list:
+        if isinstance(item, (list, tuple)):
+            flat_list.extend(flatten_list(item))  # Recursively flatten nested lists
+        else:
+            flat_list.append(item)
+    return flat_list
+
 @bot.event
 async def on_ready():
     """
@@ -191,16 +219,21 @@ async def on_ready():
         update_status.start()
     
     if DEBUG:
+        print(f"Discord version: {discord.__version__}")
         print("Registered commands:")
         for command in bot.tree.get_commands():
             print(f" - {command.name}")
         print(f"DEBUG: Admin Users: {ADMIN_USERS}")
     
+    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM puffs")
+    global puff_list
+    puff_list = flatten_list(cursor.fetchall())
+    if DEBUG:
+        print(f"List of puffs: {puff_list}")
+    
     if TABLE_CREATION:
-        conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
-        
-        cursor = conn.cursor()
-        
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS puffs (
             "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
@@ -216,8 +249,8 @@ async def on_ready():
         cursor.execute("PRAGMA journal_mode=WAL")
         
         conn.commit()
-        cursor.close()
-        conn.close()
+    cursor.close()
+    conn.close()
     
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
@@ -233,6 +266,9 @@ async def on_ready():
             "rolledGolds"	TEXT DEFAULT NULL,
             "rolledNormals"	TEXT DEFAULT NULL,
             "avgPity"	REAL DEFAULT 0,
+            "win"	INTEGER DEFAULT 0,
+	        "loss"	INTEGER DEFAULT 0,
+            "totalBattles"	INTEGER DEFAULT 0,
         )      
         """)
         
@@ -254,6 +290,13 @@ async def on_ready():
         CREATE TABLE IF NOT EXISTS pvp_lineup (
             "username"	INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "lineup"	TEXT DEFAULT NULL,
+        )
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE "cooldowns" (
+	        "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+	        "battle" INTEGER DEFAULT 0,
         )
         """)
         
@@ -328,7 +371,6 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn.close()
     
     conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
-
     cursor = conn.cursor()
     
     if int(pity) < PITY_LIMIT:
@@ -434,12 +476,6 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.close()
     conn.close()
     
-    rareColors = {
-        0 : discord.Color.blue(),
-        1 : discord.Color.purple(),
-        2 : discord.Color.gold(),
-        3 : discord.Color.greyple()
-    }
     numsuffix = {
         1 : "st",
         2 : "nd"
@@ -465,6 +501,29 @@ async def roll_a_puff(interaction: discord.Interaction):
     
     await interaction.followup.send(embed=embed)
 
+@bot.tree.command(name="pity", description="What's my pity")
+async def get_pity(interaction: discord.Interaction):
+    """
+    This Python function retrieves a user's pity value from a database and sends it as an embedded
+    message in response to a Discord interaction.
+    
+    :param interaction: The `interaction` parameter in the code snippet represents the interaction
+    between the user and the bot. It contains information about the user who triggered the command, the
+    context of the interaction, and any data associated with the interaction. In this specific context,
+    it is used to retrieve the user's ID to fetch
+    :type interaction: discord.Interaction
+    """
+    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute("SELECT pity FROM pity WHERE username = ?", (interaction.user.id,))
+    pity = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    embed = discord.Embed(title="Your pity", color=discord.Color.orange())
+    embed.add_field(name=f"Your pity is {pity}", value="")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
 async def statistics(interaction: discord.Interaction):
     """
@@ -487,14 +546,15 @@ async def statistics(interaction: discord.Interaction):
         cursor.execute("INSERT INTO stats (username) VALUES (?)", (user_id,))
         conn.commit()
     
-    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity FROM stats WHERE username = ?", (user_id,))
+    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity, win, loss, totalBattles FROM stats WHERE username = ?", (user_id,))
     choice = cursor.fetchone()
     
-    rolls,limited, gold, purple, rolledGolds, avgPity = choice
+    rolls,limited, gold, purple, rolledGolds, avgPity, wins, losses, battles = choice
     
     cursor.close()
     conn.close()
     
+    if losses == 0: losses+=1 # In case of division by 0
     frequency = {}
     if None is not rolledGolds:
         split_by_puffs = rolledGolds.split(";")
@@ -508,10 +568,14 @@ async def statistics(interaction: discord.Interaction):
         ascensions_description_string += "You're seeing this because you didn't roll any gold/limited rarity puffs :sob:"
     
     embed = discord.Embed(title="Your Puff Gacha statistics", color=discord.Color.blurple())
+    embed.add_field(name="**Gacha Statistics**", value="")
     embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
     embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {'time' if limited == 1 else 'times'}, a gold rarity puff **{gold}** {'time' if gold == 1 else 'times'}, and a purple rarity puff **{purple}** {'time' if purple == 1 else 'times'}!", inline=False)
     embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
+    embed.add_field(name="**Battle Statistics**",value="")
+    embed.add_field(name="Wins/Losses", value=f"You have battled {battles} times and have won {wins} and have lost {losses}", inline=False)
+    embed.add_field(name="WLR (Win Loss Ratio)", value=f"Your WLR is {round(wins/losses, 2)}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
     await interaction.response.send_message(embed=embed)
@@ -628,6 +692,10 @@ async def help(interaction: discord.Interaction):
         value="This is the major mechanic of this bot and this is how you set up your local account."
     )
     embed.add_field(
+        name="/pity",
+        value="See your pity, refer to /info if you don't know what pity is"
+    )
+    embed.add_field(
         name="/statistics", 
         value="This is the statistics function so you can understand more about your luck."
     )
@@ -670,6 +738,10 @@ async def help(interaction: discord.Interaction):
     embed.add_field(
         name="/battle",
         value="Use this function to challenge other players"
+    )
+    embed.add_field(
+        name="/preview",
+        value="View any puff in the game and its stats"
     )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     
@@ -981,7 +1053,7 @@ class LineupSetupButtons(discord.ui.View):
 # The `PuffDropdown` class creates a dropdown menu for selecting puffs, with options based on a
 # provided list, and handles the callback to save the selected puffs to a database.
 class PuffDropdown(discord.ui.View):
-    def __init__(self, puff_list, timeout=SETTINGS_EXPIRY):
+    def __init__(self, puff_list: dict, timeout=SETTINGS_EXPIRY):
         super().__init__(timeout=timeout)
         self.puff_list = puff_list
 
@@ -995,7 +1067,7 @@ class PuffDropdown(discord.ui.View):
             )
         else:
             options = [
-                discord.SelectOption(label=puff, value=puff) for puff in puff_list
+                discord.SelectOption(label=f"{puff} (Lvl {level})", value=puff) for puff, level in puff_list.items()
             ]
             self.select = discord.ui.Select(
                 placeholder="Choose your puffs!",
@@ -1020,17 +1092,17 @@ class PuffDropdown(discord.ui.View):
 # The `RearrangeDropdown` class in Python creates a Discord UI dropdown for rearranging items in a
 # lineup with interactive callbacks for selecting and moving items.
 class RearrangeDropdown(discord.ui.View):
-    def __init__(self, lineup, timeout=SETTINGS_EXPIRY):
+    def __init__(self, lineup: list, timeout=SETTINGS_EXPIRY):
         super().__init__(timeout=timeout)
         self.lineup = lineup
 
         # Ensure lineup has at least 1 puff, otherwise disable the dropdown
-        if not lineup:
-            self.add_item(discord.ui.Select(
-                placeholder="No puffs available to rearrange",
-                options=[discord.SelectOption(label="No puffs available", value="none")],
-                disabled=True
-            ))
+        disabled_item = discord.ui.Select(
+            placeholder="No puffs available to rearrange",
+            options=[discord.SelectOption(label="No puffs available", value="none")],
+            disabled=True
+        )
+        if not lineup: self.add_item(item=disabled_item)
         else:
             # Dropdown for selecting the puff to move
             self.select = discord.ui.Select(
@@ -1108,7 +1180,6 @@ async def setup_lineup(interaction: discord.Interaction):
     # Handle dropdown for selecting new puffs
 
 @bot.tree.command(name="battle", description="Battle another user!")
-#@commands.cooldown(1, 30, commands.BucketType.user)
 async def battle_command(interaction: discord.Interaction, opponent: discord.Member):
     """
     The `battle_command` function in a Python Discord bot allows users to battle against each other
@@ -1130,6 +1201,31 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     """
     user_id = interaction.user.id
     opponent_id = opponent.id
+    global COOLDOWN_TIME # Do not set any values = to this
+    
+    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.executemany("INSERT OR IGNORE INTO cooldowns (username) VALUES (?)", [(user_id,),(opponent_id,)]) 
+    current_time = time()
+
+    # Check if the user is on cooldown by querying the database
+    cursor.execute("SELECT battle FROM cooldowns WHERE username = ?", (user_id,))
+    result = cursor.fetchone()
+
+    if result:
+        last_used = result[0]
+        if current_time - last_used < COOLDOWN_TIME:
+            remaining_time = COOLDOWN_TIME - (current_time - last_used)
+            await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
+            conn.close()
+            return
+
+    # If user is not on cooldown, update their cooldown time
+    cursor.execute("REPLACE INTO cooldowns (username, battle) VALUES (?, ?)", (user_id, current_time))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     user_lineup = pvp_module.get_lineup(user_id)
     opponent_lineup = pvp_module.get_lineup(opponent_id)
@@ -1155,6 +1251,22 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
         winner = opponent.display_name
     elif overall_score == 0:
         winner = ""
+    
+    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    cursor = conn.cursor()
+    
+    cursor.execute("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", (user_id,))
+    cursor.execute("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", (opponent_id,))
+    if overall_score > 0:
+        cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (user_id,))
+        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (opponent_id,))
+    elif overall_score < 0:
+        cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (opponent_id,))
+        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (opponent_id,))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
     
     result_message = "\n".join(results)
     embed = discord.Embed(title=f"Puff Battle Results - {winner if winner != "" else "**⚔️ DRAW**"}", description=result_message, color=color)
@@ -1199,6 +1311,70 @@ async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=not visible)
+
+async def item_autocomplete(interaction: discord.Interaction, current: str):
+    """
+    The function `item_autocomplete` suggests items that match what the user types based on a list of
+    items called `puff_list`.
+    
+    :param interaction: The `interaction` parameter in the `item_autocomplete` function represents the
+    interaction that triggered the autocomplete request. This interaction contains information about the
+    user, the command that was invoked, and any data associated with the interaction. It allows you to
+    interact with the user and respond accordingly based on their input
+    :type interaction: discord.Interaction
+    :param current: The `current` parameter in the `item_autocomplete` function represents the current
+    input or text that the user has typed so far. This input is used to filter and suggest items that
+    match what the user is typing
+    :type current: str
+    :return: The function `item_autocomplete` returns a list of `discord.app_commands.Choice` objects
+    that match the user input `current`. These choices are generated based on the items in the
+    `puff_list` that contain the user input (case-insensitive match). The choices are created by
+    splitting the items in `puff_list` by spaces and joining them with underscores.
+    """
+    if DEBUG:
+        print(f"info being entered for autocomplete {current}")
+        print(f"First few puffs in puff_list {puff_list[:5]}")
+    choices= [
+        discord.app_commands.Choice(name=puff, value="_".join(puff.split(" ")))
+        for puff in puff_list
+        if current.lower() in puff.lower()]
+    if DEBUG:
+        for choice in choices:
+            print(f"Choice: name='{choice.name}', value='{choice.value}'")
+    return choices
+
+@bot.tree.command(name="preview", description="Preview a puff")
+@discord.app_commands.describe(puff="A puff to preview")
+@discord.app_commands.autocomplete(puff=item_autocomplete)
+async def preview(interaction: discord.Interaction, puff: str):
+    """
+    This Python function previews a puff by fetching its data from a database and creating an embed with
+    relevant information and an image.
+    
+    :param interaction: The `interaction` parameter in the code snippet represents the interaction
+    between the user and the bot. It contains information about the user's input, the command invoked,
+    and other relevant details needed to process and respond to the user's request effectively
+    :type interaction: discord.Interaction
+    :param puff: The `puff` parameter in the code snippet represents the name of a puff that the user
+    wants to preview. The code fetches information about the specified puff from a database and
+    generates an embed with details such as description, rarity, and stats of the puff. The embed also
+    includes an image of
+    :type puff: str
+    """
+    puff = " ".join(puff.split("_"))
+    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT description, imagepath, isRare, stats FROM puffs WHERE name = ?", (puff,))
+    puff_data = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    description, imagepath, isRare, stats = puff_data
+    embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
+    embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
+    embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
+    embed.add_field(name="Stats", value=f"Health: {stats.split(";")[1]}\nAttack: {stats.split(";")[0]}")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
+    await interaction.response.send_message(embed=embed)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
 
