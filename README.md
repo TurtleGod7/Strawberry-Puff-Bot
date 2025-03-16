@@ -107,5 +107,3 @@ The code was written by @TurtleGod7 and the puffs were drawn and created by @orc
 [^5]: If you want to wipe any data, make sure you create two databases at these file paths (relative):
     assets/database/puffs.db (HIGHLY UNRECOMMEND)
     assets/database/users.db
-
-<script src='https://cdn.jsdelivr.net/gh/eddymens/markdown-external-link-script@v2.0.0/main.min.js'></script>
