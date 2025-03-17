@@ -43,7 +43,7 @@ class Puff:
         self.attack += 1
         self.health += 2
 
-def get_puffs_for_battle(puff_names, user_id=None):
+def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
@@ -99,7 +99,7 @@ def get_puffs_for_battle(puff_names, user_id=None):
     
     return final_data
 
-def get_lineup(user_id=None):
+def get_lineup(user_id):
     """
     The function `get_lineup` retrieves a user's PvP lineup from a database and returns it as a list of
     lineup items.
@@ -120,7 +120,7 @@ def get_lineup(user_id=None):
     conn.close()
     return data.split(";") if data else []
 
-def save_lineup(lineup, user_id=None):
+def save_lineup(lineup, user_id):
     """
     The `save_lineup` function saves a lineup for a user in a database, formatting the lineup and
     updating the database with the user's ID.
@@ -143,7 +143,7 @@ def save_lineup(lineup, user_id=None):
     cursor.close()
     conn.close()
 
-def get_owned(user_id=None):
+def get_owned(user_id):
     """
     This Python function retrieves owned stats for a specific user from a database and returns the
     unpacked rolled information.
@@ -159,8 +159,8 @@ def get_owned(user_id=None):
     cursor.execute("SELECT rolledGolds, rolledNormals FROM stats WHERE username = ?", (user_id,))
     data = cursor.fetchone()
     goldRolls = data[0] if data and data[0] else ""
-    normalRolls = ";" + data[1] if data and data[1] else ""
-    packedStats = goldRolls + normalRolls if goldRolls or normalRolls else ""
+    normalRolls = data[1] if data and data[1] else ""
+    packedStats = goldRolls + ";" + normalRolls if goldRolls or normalRolls else ""
     if packedStats == "": packedStats = None
     cursor.close()
     conn.close()

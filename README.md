@@ -29,7 +29,7 @@ This bot is live and is available for you to add to your Discord server whenever
 
 The bot's discord username is `Strawberry Puff Bot#3856` and its App ID is `1338650603617910817`. Please use this if you need help verifying my bot. Also on the bot's profile the "Copy Link" option links to the Guild Install link provided above.
 
-By the way, currently I don't have the capabilities to have the bot running 24/7, so expect there to be lots of downtime for bot usage. Although. there happens to be a setting that pings you on startup if you're worrying about when you can play with the bot. Other then that, have fun playing with this passion project I made and make sure to thank @orckadork for the drawings!!!
+By the way, currently I don't have the capabilities to have the bot running 24/7, so expect there to be lots of downtime for bot usage. Although. there happens to be a setting that pings you on startup if you're worrying about when you can play with the bot. Other then that, have fun playing with this passion project I made and make sure to thank @orchadork for the drawings!!!
 
 ## Installation
 
@@ -94,7 +94,7 @@ For any questions or suggestions, please open an issue or contact me.
 
 ## Credit
 
-The code was written by @TurtleGod7 and the puffs were drawn and created by @orckadork.
+The code was written by @TurtleGod7 and the puffs were drawn and created by @orchadork.
 
 [^1]: I've only tested this code on python 3.9.6 on my Mac but in theory it should work on 3.7.X and greater.
 

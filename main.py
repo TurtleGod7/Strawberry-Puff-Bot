@@ -1,4 +1,3 @@
-from dis import disco
 from os import getenv, path; from os import name as os_name
 from random import choices
 from sqlite3 import connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
@@ -6,7 +5,6 @@ from statistics import mean
 from math import ceil, floor
 from time import time, mktime
 from datetime import datetime
-from turtle import title
 import pvp_module
 import discord
 from discord.ext import commands
@@ -142,8 +140,8 @@ def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
-        frequency[split.split("_")[0]] = int(split.split("_")[1])
-    
+        try: frequency[split.split("_")[0]] = int(split.split("_")[1])
+        except: continue
     return dict(sorted(frequency.items()))
 
 def pack_rolled_info(frequency_dict: dict):
@@ -232,7 +230,6 @@ async def on_ready():
     puff_list = flatten_list(cursor.fetchall())
     if DEBUG:
         print(f"List of puffs: {puff_list}")
-    
     if TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS puffs (
@@ -1035,8 +1032,8 @@ async def skater(ctx, *, arg):
 
 # This class defines buttons for rearranging a lineup and selecting new puffs in a Discord UI.
 class LineupSetupButtons(discord.ui.View):
-    def __init__(self, timeout=SETTINGS_EXPIRY):
-        super().__init__(timeout=timeout)
+    def __init__(self):
+        super().__init__(timeout=SETTINGS_EXPIRY)
 
     @discord.ui.button(label="🛠️ Rearrange Lineup", style=discord.ButtonStyle.primary)
     async def rearrange_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1053,8 +1050,8 @@ class LineupSetupButtons(discord.ui.View):
 # The `PuffDropdown` class creates a dropdown menu for selecting puffs, with options based on a
 # provided list, and handles the callback to save the selected puffs to a database.
 class PuffDropdown(discord.ui.View):
-    def __init__(self, puff_list: dict, timeout=SETTINGS_EXPIRY):
-        super().__init__(timeout=timeout)
+    def __init__(self, puff_list: dict):
+        super().__init__(timeout=SETTINGS_EXPIRY)
         self.puff_list = puff_list
 
         # Create dropdown directly in the View
@@ -1092,8 +1089,8 @@ class PuffDropdown(discord.ui.View):
 # The `RearrangeDropdown` class in Python creates a Discord UI dropdown for rearranging items in a
 # lineup with interactive callbacks for selecting and moving items.
 class RearrangeDropdown(discord.ui.View):
-    def __init__(self, lineup: list, timeout=SETTINGS_EXPIRY):
-        super().__init__(timeout=timeout)
+    def __init__(self, lineup: list):
+        super().__init__(timeout=SETTINGS_EXPIRY)
         self.lineup = lineup
 
         # Ensure lineup has at least 1 puff, otherwise disable the dropdown
@@ -1171,13 +1168,46 @@ async def setup_lineup(interaction: discord.Interaction):
     this parameter to send responses back to the user, access
     :type interaction: discord.Interaction
     """
-    view = LineupSetupButtons(timeout=SETTINGS_EXPIRY)
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        await self.message.edit(content="⏳ Lineup setup timed out!", view=self)
+    view = LineupSetupButtons()
     await interaction.response.send_message("⚔️ Setup your lineup!", view=view, ephemeral=True)
     # Handle dropdown for selecting new puffs
+
+class BattleConfirmView(discord.ui.View):
+    def __init__(self, challenger, opponent):
+        super().__init__(timeout=SETTINGS_EXPIRY)
+        self.challenger = challenger
+        self.opponent = opponent
+        self.result = None
+
+    @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success)
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id == self.opponent.id:
+            self.result = True
+            await interaction.response.edit_message(
+                content=f"⚔️ Battle confirmed between {self.challenger.mention} and {self.opponent.mention}!", 
+                view=None
+            )
+            self.stop()
+        else:
+            await interaction.response.send_message("You're not the chosen opponent!", ephemeral=True)
+
+    @discord.ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id == self.opponent.id:
+            self.result = False
+            await interaction.response.edit_message(
+                content=f"❌ {self.opponent.mention} declined the battle!", 
+                view=None
+            )
+            self.stop()
+        else:
+            await interaction.response.send_message("You're not the chosen opponent!", ephemeral=True)
+
+    async def on_timeout(self):
+        """Handles timeout properly and stops the view."""
+        if self.result is None:
+            self.stop()
+
 
 @bot.tree.command(name="battle", description="Battle another user!")
 async def battle_command(interaction: discord.Interaction, opponent: discord.Member):
@@ -1205,9 +1235,12 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.executemany("INSERT OR IGNORE INTO cooldowns (username) VALUES (?)", [(user_id,),(opponent_id,)]) 
-    current_time = time()
+    cursor.execute(f"SELECT EXISTS(SELECT 1 FROM pvp_lineup WHERE username = ?)", (user_id,))
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(f"INSERT INTO pvp_lineup (username) VALUES (?)", (user_id,))
+        conn.commit()
 
+    current_time = time()
     # Check if the user is on cooldown by querying the database
     cursor.execute("SELECT battle FROM cooldowns WHERE username = ?", (user_id,))
     result = cursor.fetchone()
@@ -1219,20 +1252,43 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
             await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             conn.close()
             return
+    
+    # Then checks if they're battling themselves
+    if opponent == interaction.user:
+        await interaction.response.send_message("You can't battle yourself!", ephemeral=True)
+        return
 
+    # Finally checks if who they are battling doesn't have a saved lineup
+    user_lineup = pvp_module.get_lineup(user_id)
+    opponent_lineup = pvp_module.get_lineup(opponent_id)
+    if not user_lineup or not opponent_lineup:
+        await interaction.response.send_message(content="⚔️ Both users need a saved lineup!", ephemeral=True)
+        return
+    
+    view = BattleConfirmView(interaction.user, opponent)
+    await interaction.response.send_message(
+        f"⚔️ {interaction.user.mention} challenges {opponent.mention} to a battle! Do you accept?",
+        view=view
+    )
+    # Gets confirmation if they would be fine battling
+    await view.wait()
+    if view.result is False:
+        await interaction.followup.send(content="The battle was declined.")
+        return
+    if view.result is None:
+        await interaction.followup.send(content="⏳ The challenge timed out!")
+        return
+    if not view.result or view.result is None:
+        print(view.result)
+        return # catch all
+
+    current_time = time() # Updated here to be more accurate
     # If user is not on cooldown, update their cooldown time
     cursor.execute("REPLACE INTO cooldowns (username, battle) VALUES (?, ?)", (user_id, current_time))
     
     conn.commit()
     cursor.close()
     conn.close()
-
-    user_lineup = pvp_module.get_lineup(user_id)
-    opponent_lineup = pvp_module.get_lineup(opponent_id)
-
-    if not user_lineup or not opponent_lineup:
-        await interaction.response.send_message("⚔️ Both users need a saved lineup!", ephemeral=True)
-        return
 
     # Convert names to Puff objects
     user_puffs = pvp_module.get_puffs_for_battle(user_lineup, user_id)
@@ -1269,12 +1325,12 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     conn.close()
     
     result_message = "\n".join(results)
-    embed = discord.Embed(title=f"Puff Battle Results - {winner if winner != "" else "**⚔️ DRAW**"}", description=result_message, color=color)
+    embed = discord.Embed(title=f"Puff Battle Results - {winner if winner != '' else '**⚔️ DRAW**'}", description=result_message, color=color)
     embed.add_field(name="Competitors", value=f"<@{interaction.user.id}> vs <@{opponent.id}>", inline=False)
     embed.add_field(name="Your Lineup", value=", ".join(user_lineup), inline=True)
     embed.add_field(name="Opponent's Lineup", value=", ".join(opponent_lineup), inline=True)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="lineup", description="Show your lineup")
 async def get_lineup(interaction: discord.Interaction, visible: bool=False):
@@ -1295,17 +1351,10 @@ async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     """
     user_id = interaction.user.id
     owned_puffs = pvp_module.get_owned(user_id)
-    puff_stats = []
-    lineup_puffs = pvp_module.get_lineup(user_id)
-    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
-    cursor = conn.cursor()
-    for puff in owned_puffs.keys():
-        cursor.execute("SELECT stats FROM puffs WHERE name = ?", (puff,))
-        puff_stats.append(cursor.fetchone()[0].split(";"))
-    cursor.close()
-    conn.close()
     puff_names = list(owned_puffs.keys())
-    ownedPuffsmessage = "\n".join(f"* {puff} (Lvl {level})\n    * Attack: {puff_stats[puff_names.index(puff)][0]} Health: {puff_stats[puff_names.index(puff)][1]}" for puff, level in owned_puffs.items())
+    puff_stats = pvp_module.get_puffs_for_battle(puff_names, user_id)
+    lineup_puffs = pvp_module.get_lineup(user_id)
+    ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
     embed = discord.Embed(title="Your lineup", color=discord.Color.blue())
     embed.add_field(name="Owned Puffs", value=ownedPuffsmessage)
     embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
@@ -1372,7 +1421,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
-    embed.add_field(name="Stats", value=f"Health: {stats.split(";")[1]}\nAttack: {stats.split(";")[0]}")
+    embed.add_field(name="Stats", value=f"Health: {stats.split(';')[1]}\nAttack: {stats.split(';')[0]}")
     embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
@@ -1472,24 +1521,23 @@ async def statsof(ctx, arg: discord.User):
     :type arg: discord.User
     """
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
-    
     cursor = conn.cursor()
     
     user_id = arg.id
-    
-    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))    
+    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO stats (username) VALUES (?)", (user_id,))
         conn.commit()
     
-    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity FROM stats WHERE username = ?", (user_id,))
+    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity, win, loss, totalBattles FROM stats WHERE username = ?", (user_id,))
     choice = cursor.fetchone()
     
-    rolls,limited, gold, purple, rolledGolds, avgPity = choice
+    rolls,limited, gold, purple, rolledGolds, avgPity, wins, losses, battles = choice
     
     cursor.close()
     conn.close()
     
+    if losses == 0: losses+=1 # In case of division by 0
     frequency = {}
     if None is not rolledGolds:
         split_by_puffs = rolledGolds.split(";")
@@ -1500,13 +1548,17 @@ async def statsof(ctx, arg: discord.User):
     for k, v in frequency.items():
         ascensions_description_string += f"* *{k}*  **{v}** {'time' if v == 1 else 'times'}\n"
     if ascensions_description_string == "":
-        ascensions_description_string += "You're seeing this because they didn't roll any gold/limited rarity puffs :sob:"
+        ascensions_description_string += "You're seeing this because you didn't roll any gold/limited rarity puffs :sob:"
     
-    embed = discord.Embed(title=f"{arg.display_name.capitalize()} Puff Gacha statistics", color=discord.Color.blurple())
-    embed.add_field(name="Total Rolls", value=f"They've rolled **{rolls}** times!", inline=False)
-    embed.add_field(name="Rare Rolls", value=f"They've also ~~pulled~~ rolled a limited rarity puff **{limited}** {'time' if limited == 1 else 'times'}, a gold rarity puff **{gold}** {'time' if gold == 1 else 'times'}, and a purple rarity puff **{purple}** {'time' if purple == 1 else 'times'}!", inline=False)
-    embed.add_field(name="Average Pity", value=f"Their average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
+    embed = discord.Embed(title=f"{arg.display_name} Puff Gacha statistics", color=discord.Color.blurple())
+    embed.add_field(name="**Gacha Statistics**", value="")
+    embed.add_field(name="Total Rolls", value=f"You've rolled **{rolls}** times!", inline=False)
+    embed.add_field(name="Rare Rolls", value=f"You've also ~~pulled~~ rolled a limited rarity puff **{limited}** {'time' if limited == 1 else 'times'}, a gold rarity puff **{gold}** {'time' if gold == 1 else 'times'}, and a purple rarity puff **{purple}** {'time' if purple == 1 else 'times'}!", inline=False)
+    embed.add_field(name="Average Pity", value=f"Your average pity to roll a gold/limited rarity puff is **{round(avgPity,2)}**", inline=False)
     embed.add_field(name="Ascensions", value=ascensions_description_string, inline=False)
+    embed.add_field(name="**Battle Statistics**",value="")
+    embed.add_field(name="Wins/Losses", value=f"You have battled {battles} times and have won {wins} and have lost {losses}", inline=False)
+    embed.add_field(name="WLR (Win Loss Ratio)", value=f"Your WLR is {round(wins/losses, 2)}", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     
     await ctx.send(embed=embed)
@@ -1613,6 +1665,21 @@ async def getdata(ctx, *, arg:ToLowerConverter):
 
 @bot.command()
 @is_authorised_user()
+async def getlineup(ctx, arg: discord.User):
+    user_id = arg.id
+    owned_puffs = pvp_module.get_owned(user_id)
+    puff_names = list(owned_puffs.keys())
+    puff_stats = pvp_module.get_puffs_for_battle(puff_names, user_id)
+    lineup_puffs = pvp_module.get_lineup(user_id)
+    ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
+    embed = discord.Embed(title=f"{arg.display_name} lineup", color=discord.Color.blue())
+    embed.add_field(name="Owned Puffs", value=ownedPuffsmessage)
+    embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
+    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
+    await ctx.send(embed=embed)
+
+@bot.command()
+@is_authorised_user()
 async def devdocs(ctx):
     """
     This function sends a Discord embed message containing information about developer documentation and
@@ -1624,7 +1691,7 @@ async def devdocs(ctx):
     """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
-    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)", inline=False)
     embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
@@ -1646,5 +1713,5 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CheckFailure):# Would only be for admin commands right now
         print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
 
-# add pvp fucntion
+# make the website
 bot.run(TOKEN) # type: ignore
