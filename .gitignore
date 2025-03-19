@@ -3,3 +3,4 @@
 .venv
 next
 oldhtml
+__pycache__

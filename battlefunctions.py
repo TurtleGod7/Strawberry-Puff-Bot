@@ -1,7 +1,8 @@
+from flags import DEBUG
 from sqlite3 import connect
 from os import name as os_name
 
-def unpack_rolled_info(rollInfo: str):
+def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
     """
     The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
     semicolons, splits the string into individual pairs, extracts the keys and values, and returns a
@@ -47,7 +48,7 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
-    
+
     :param puff_names: The `get_puffs_for_battle` function takes a list of `puff_names` as input. It
     then retrieves the stats for each puff from a database, calculates the attack and health stats based
     on the user's level (if provided), and creates a list of `Puff` objects
@@ -63,17 +64,17 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     final_data = []
     conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
     cursor = conn.cursor()
-    
+
     for puff in puff_names:
         cursor.execute("SELECT stats FROM puffs WHERE name = ?", (puff,))
         puff_data.append(cursor.fetchone())
-        
+
     cursor.close()
     conn.close()
-    
+
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT rolledGolds, rolledNormals FROM stats WHERE username = ?", (user_id,))
     data = cursor.fetchone()
     goldRolls = data[0] if data and data[0] else ""
@@ -81,7 +82,7 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     packedStats = goldRolls + ";" + normalRolls if goldRolls or normalRolls else ""
     if packedStats == "": packedStats = None
     unpackedStats = unpack_rolled_info(packedStats) # type: ignore
-    
+
     cursor.close()
     conn.close()
     for puff in range(len(puff_data)):
@@ -89,21 +90,24 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
 
         # If user_id is provided, get the user's level for the puff
         level = 0
-        level = int(unpackedStats.get(puff_names[puff], 0))
-        
+        level = unpackedStats.get(puff_names[puff],-1)
+        if level == -1:
+            print(f"Error: {puff_names[puff]} not found in unpackedStats")
+            continue
+
         # Scale stats based on level
         attack += level
         health += level * 2
-        
+
         final_data.append(Puff(puff_names[puff], attack, health, user_id, level))
-    
+
     return final_data
 
 def get_lineup(user_id):
     """
     The function `get_lineup` retrieves a user's PvP lineup from a database and returns it as a list of
     lineup items.
-    
+
     :param user_id: The `get_lineup` function retrieves the lineup data for a specific user from a
     database table named `pvp_lineup`. The function takes a `user_id` as an optional parameter, which is
     used to identify the user whose lineup data needs to be retrieved
@@ -134,11 +138,11 @@ def save_lineup(lineup, user_id):
     """
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    
+
     formattedLineup = ";".join(lineup)
     cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (user_id,)) 
     cursor.execute("UPDATE pvp_lineup SET lineup = ? WHERE username = ?", (formattedLineup, user_id,))
-    
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -155,7 +159,7 @@ def get_owned(user_id):
     """
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT rolledGolds, rolledNormals FROM stats WHERE username = ?", (user_id,))
     data = cursor.fetchone()
     goldRolls = data[0] if data and data[0] else ""
@@ -184,9 +188,13 @@ def battle(puff1: Puff, puff2: Puff):
     (puff1.name vs puff2.name)"
     """
     while puff1.health > 0 and puff2.health > 0:
+        if DEBUG:
+            print(f"{puff1.name} ({puff1.health}) vs {puff2.name} ({puff2.health})\nOpponent: {puff1.owner} vs {puff2.owner}")
         puff2.health -= puff1.attack
         puff1.health -= puff2.attack
-        if puff1.health and puff2.health <= 0:
+        if DEBUG:
+            print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
+        if puff1.health <= 0 and puff2.health <= 0:
             return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0
         if puff2.health <= 0:
             return f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1

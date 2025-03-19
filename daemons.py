@@ -4,7 +4,7 @@ from time import sleep
 from threading import Thread, Lock
 from atexit import register
 
-class Banned_Users_Handler:
+class BannedUsersHandler:
     def __init__(self, db_name="users.db", interval=1800):
         """Initialize the database connection and start the background commit thread."""
         db_path = "assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name
