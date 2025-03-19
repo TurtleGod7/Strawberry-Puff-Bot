@@ -6,6 +6,8 @@ from math import ceil, floor
 from time import time, mktime
 from datetime import datetime
 import pvp_module
+import daemon_module
+import failures_module
 import discord
 from discord.ext import commands
 from discord.ext import tasks
@@ -17,8 +19,10 @@ TOKEN = getenv("DISCORD_TOKEN")
 ADMIN_USERS = set(map(int,getenv("ADMIN_USERS", "").split(",")))
 
 ### Control variables
+BANNED_HANDLER = daemon_module.Banned_Users_Handler()
+PRINT_BANNED_USER_USING_BOT = False
 CHANGE_PROFILE = False
-STOP_PING_ON_STARTUP = False
+STOP_PING_ON_STARTUP = True
 DEBUG = False
 TABLE_CREATION = False
 PITY_LIMIT = 200
@@ -43,7 +47,12 @@ STATUSES = [
     discord.Activity(type=discord.ActivityType.competing, name="for max ascension puffs", state="I heard that the max ascension puff is rare to have. If only spamming this bot wasn't allowed, it would be even rarer"),
 ]
 COOLDOWN_TIME = 30  # Cooldown in seconds
+###
 
+### Errors
+NotAdmin = failures_module.NotAdminError
+BannedPlayer = failures_module.BannedPlayerError
+BannedPlayerCtx = failures_module.BannedPlayerErrorCtx
 ###
 
 ### Global Variables that DON'T need to be changed
@@ -68,12 +77,13 @@ rareColors = {
     }
 activity_task_running = False
 puff_list = []
+banned_users = {}
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True)
 
 # The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
 # lowercase.
@@ -185,7 +195,35 @@ def is_authorised_user():
     async def predicate(ctx):
         if ctx.author.id in ADMIN_USERS:
             return True
-        return False
+        raise NotAdmin("You are not an admin user.")
+    return commands.check(predicate)
+
+def is_banned_user(interaction: discord.Interaction):
+    """
+    The function `is_banned_user` checks if a user is banned based on their interaction and the banned
+    time.
+    
+    :param interaction: discord.Interaction
+    :type interaction: discord.Interaction
+    :return: The function `is_banned_user` is returning a boolean value. It returns `True` if the user
+    in the interaction is banned or if the ban time has expired, otherwise it returns `False`.
+    """
+    banned_time = banned_users.get(interaction.user.id, None)
+    if banned_time is None or banned_time < time():
+        return True
+    raise BannedPlayer("You are banned from using this bot. Please contact an admin for more information.")
+
+def is_banned_user_ctx():
+    """
+    The function `is_banned_user_ctx` returns a Discord.py check that verifies if the author of a
+    command is not in a list of banned user IDs.
+    :return: A check decorator function is being returned.
+    """
+    async def predicate(ctx):
+        banned_time = banned_users.get(ctx.author.id, None)
+        if banned_time is None or banned_time < time():
+            return True
+        raise BannedPlayerCtx("You are banned from using this bot. Please contact an admin for more information.")
     return commands.check(predicate)
 
 def flatten_list(nested_list):
@@ -264,7 +302,7 @@ async def on_ready():
             "rolledNormals"	TEXT DEFAULT NULL,
             "avgPity"	REAL DEFAULT 0,
             "win"	INTEGER DEFAULT 0,
-	        "loss"	INTEGER DEFAULT 0,
+            "loss"	INTEGER DEFAULT 0,
             "totalBattles"	INTEGER DEFAULT 0,
         )      
         """)
@@ -285,15 +323,22 @@ async def on_ready():
         
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS pvp_lineup (
-            "username"	INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "lineup"	TEXT DEFAULT NULL,
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "lineup" TEXT DEFAULT NULL,
         )
         """)
         
         cursor.execute("""
         CREATE TABLE "cooldowns" (
-	        "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-	        "battle" INTEGER DEFAULT 0,
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "battle" INTEGER DEFAULT 0,
+        )
+        """)
+        
+        cursor.execute("""
+        CREATE TABLE "banned_users" (
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "time" INTEGER NOT NULL DEFAULT 0,
         )
         """)
         
@@ -306,11 +351,15 @@ async def on_ready():
         cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
         PeopletoDM = cursor.fetchall()
     
+    global banned_users
+    cursor.execute("SELECT * FROM banned_users")
+    banned_users = dict(cursor.fetchall()) # Includes user ID and time (in unix time)
+    
     cursor.close()
     conn.close()
-    
     for k in PeopletoDM:
-        await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
+        if k[0] is not None:
+            await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
     
     if CHANGE_PROFILE:
         if not path.exists(AVATAR_PATH):
@@ -336,6 +385,7 @@ async def on_ready():
     print(f'Logged in as {bot.user}')    
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
+@discord.app_commands.check(is_banned_user)
 async def roll_a_puff(interaction: discord.Interaction):
     """
     This function rolls a random puff for a user in a Discord bot, handling rarity, statistics tracking,
@@ -499,6 +549,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="pity", description="What's my pity")
+@discord.app_commands.check(is_banned_user)
 async def get_pity(interaction: discord.Interaction):
     """
     This Python function retrieves a user's pity value from a database and sends it as an embedded
@@ -522,6 +573,7 @@ async def get_pity(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="statistics", description="Get some info on your rolls")
+@discord.app_commands.check(is_banned_user)
 async def statistics(interaction: discord.Interaction):
     """
     This Python function retrieves and displays statistics related to a user's rolls in a gacha game
@@ -533,7 +585,6 @@ async def statistics(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
-    
     cursor = conn.cursor()
     
     user_id = interaction.user.id
@@ -581,14 +632,14 @@ async def statistics(interaction: discord.Interaction):
 # pagination controls in a Discord bot.
 class DropRatesView(discord.ui.View):
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
-        super().__init__(timeout=BUTTON_PAGE_EXPIRY)  # Buttons expire after 60 seconds
+        super().__init__(timeout=BUTTON_PAGE_EXPIRY)
         self.items = items
         self.total_weight0 = total_weight0
         self.total_weight1 = total_weight1
         self.total_weight2 = total_weight2
         self.total_weight3 = total_weight3
         self.page = 0
-        self.items_per_page = ITEMS_PER_PAGE  # Adjust if needed
+        self.items_per_page = ITEMS_PER_PAGE
 
     def generate_embed(self):
         isRaretoWeight = {0:self.total_weight0, 1:self.total_weight1, 2:self.total_weight2, 3:self.total_weight3,}
@@ -623,6 +674,7 @@ class DropRatesView(discord.ui.View):
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
 @bot.tree.command(name="chances", description="Displays the chances for each puff")
+@discord.app_commands.check(is_banned_user)
 async def drop_rates(interaction: discord.Interaction):
     """
     This Python function retrieves data from a SQLite database and calculates the chances for each
@@ -657,6 +709,7 @@ async def drop_rates(interaction: discord.Interaction):
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
 @bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
+@discord.app_commands.check(is_banned_user)
 async def suggestions(interaction: discord.Interaction):
     """
     The `suggestions` function in the Python code provides a command for users to suggest new ideas for
@@ -672,6 +725,7 @@ async def suggestions(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
+@discord.app_commands.check(is_banned_user)
 async def help(interaction: discord.Interaction):
     """
     The `help` function in this Python code provides a list of commands and their descriptions for
@@ -745,6 +799,7 @@ async def help(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="info", description="Just some good to know information")
+@discord.app_commands.check(is_banned_user)
 async def information(interaction: discord.Interaction):
     """
     The `information` function provides helpful information about rarities, saving data, the gacha
@@ -839,6 +894,7 @@ class SettingsView(discord.ui.View):
         self.stop()
 
 @bot.tree.command(name="settings", description="Just set up your settings")
+@discord.app_commands.check(is_banned_user)
 async def settings(interaction: discord.Interaction):
     """
     The function sets up user settings in a database and sends a message with options to the user.
@@ -866,6 +922,7 @@ async def settings(interaction: discord.Interaction):
     await interaction.response.send_message("Choose an option below:", view=SettingsView(user_id), ephemeral=True)
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
+@discord.app_commands.check(is_banned_user)
 async def showBanner(interaction: discord.Interaction):
     """
     This Python function displays the current limited puff banner with its start and end dates, time
@@ -890,6 +947,7 @@ async def showBanner(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @bot.command()
+@is_banned_user_ctx()
 async def pring(ctx, *, arg):
     """
     The above Python function defines a command for a bot that sends a message with the input argument
@@ -905,6 +963,7 @@ async def pring(ctx, *, arg):
     await ctx.send(arg)
 
 @bot.tree.command(name="compare", description="Compare your rolls to other people!")
+@discord.app_commands.check(is_banned_user)
 async def comparision(interaction: discord.Interaction, user: discord.Member):
     """
     This function compares the puff rolls and statistics of the user invoking the command with another
@@ -1002,6 +1061,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="github", description="Get the GitHub link for this bot")
+@discord.app_commands.check(is_banned_user)
 async def github(interaction: discord.Interaction):
     """
     This Python function sends the GitHub link for the bot to the user in a Discord interaction.
@@ -1017,6 +1077,7 @@ async def github(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.command()
+@is_banned_user_ctx()
 async def skater(ctx, *, arg):
     """
     The function sends a message with the input argument followed by a skater emoji.
@@ -1157,6 +1218,7 @@ class RearrangeDropdown(discord.ui.View):
         position_select.callback = position_callback
 
 @bot.tree.command(name="setup_lineup", description="Set or rearrange your lineup!")
+@discord.app_commands.check(is_banned_user)
 async def setup_lineup(interaction: discord.Interaction):
     """
     This Python function sets up or rearranges a user's lineup by fetching their puffs from the database
@@ -1210,6 +1272,7 @@ class BattleConfirmView(discord.ui.View):
 
 
 @bot.tree.command(name="battle", description="Battle another user!")
+@discord.app_commands.check(is_banned_user)
 async def battle_command(interaction: discord.Interaction, opponent: discord.Member):
     """
     The `battle_command` function in a Python Discord bot allows users to battle against each other
@@ -1333,6 +1396,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="lineup", description="Show your lineup")
+@discord.app_commands.check(is_banned_user)
 async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     """
     This Python function retrieves a user's owned puffs and lineup from a database, formats the data
@@ -1395,6 +1459,7 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
 @bot.tree.command(name="preview", description="Preview a puff")
 @discord.app_commands.describe(puff="A puff to preview")
 @discord.app_commands.autocomplete(puff=item_autocomplete)
+@discord.app_commands.check(is_banned_user)
 async def preview(interaction: discord.Interaction, puff: str):
     """
     This Python function previews a puff by fetching its data from a database and creating an embed with
@@ -1658,7 +1723,7 @@ async def getdata(ctx, *, arg:ToLowerConverter):
     embed.add_field(name="Description", value=description, inline=False)
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     embed.add_field(name="Chance", value=weightString, inline=False)
-    embed.add_field(name="Stats", value=f"Attacks: {stats.split(";")[0]} Health: {stats.split(';')[1]}", inline=False)
+    embed.add_field(name="Stats", value=f"Attacks: {stats.split(';')[0]} Health: {stats.split(';')[1]}", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     embed.set_image(url=image_path)
     await ctx.send(embed=embed)
@@ -1666,6 +1731,17 @@ async def getdata(ctx, *, arg:ToLowerConverter):
 @bot.command()
 @is_authorised_user()
 async def getlineup(ctx, arg: discord.User):
+    """
+    This Python function retrieves data from a SQLite database based on a given argument through another module,
+    constructs an embed with the retrieved information, and sends it as a message in a Discord channel.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
+    being invoked. It contains information about the message, the channel, the author, and other
+    relevant details needed to process the command within a Discord bot
+    :param arg: The `arg` parameter in the `getlineup` command is used to specify the User so the data
+    can be retrieved. This parameter is passed as an argument to the command and is converted using the `discord.User`
+    :type arg: discord.User
+    """
     user_id = arg.id
     owned_puffs = pvp_module.get_owned(user_id)
     puff_names = list(owned_puffs.keys())
@@ -1680,6 +1756,51 @@ async def getlineup(ctx, arg: discord.User):
 
 @bot.command()
 @is_authorised_user()
+async def ban(ctx, arg:discord.User, seconds: int):
+    """
+    This Python function is used to ban a user if they aren't currently banned and their ban has expired.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the Context object. It provides
+    information about the current state of the bot and the invocation context of the command being
+    executed. It includes details such as the message, the channel, the author of the message, and more.
+    This parameter is commonly used in
+    :param arg: The `arg` parameter in the `ban` command is of type `discord.User`. It represents the
+    user that is being banned
+    :type arg: discord.User
+    """
+    banned_time = banned_users.get(arg.id, None)
+    if banned_time is None or banned_time < time():
+        banned_users[arg.id] = time() + seconds
+        await ctx.send(f"{arg.display_name} has been banned for {seconds} seconds")
+        BANNED_HANDLER.add_data([(arg.id, time() + seconds)])
+    else:
+        await ctx.send(f"{arg.display_name} is already banned for {banned_time - time()} seconds")
+
+@bot.command()
+@is_authorised_user()
+async def unban(ctx, arg:discord.User):
+    """
+    This Python function is used to unban a user if they are currently banned and their ban has not
+    expired.
+    
+    :param ctx: The `ctx` parameter in the code snippet represents the Context object. It provides
+    information about the current state of the bot and the invocation context of the command being
+    executed. It includes details such as the message, the channel, the author of the message, and more.
+    This parameter is commonly used in
+    :param arg: The `arg` parameter in the `unban` command is of type `discord.User`. It represents the
+    user that is being unbanned
+    :type arg: discord.User
+    """
+    banned_time = banned_users.get(arg.id, None)
+    if banned_time is not None and banned_time > time():
+        banned_users[arg.id] = time() - 1
+        await ctx.send(f"{arg.display_name} has been unbanned")
+        BANNED_HANDLER.add_data([(arg.id, time() - 1)])
+    else:
+        await ctx.send(f"{arg.display_name} is not banned or the ban has expired")
+
+@bot.command()
+@is_authorised_user()
 async def devdocs(ctx):
     """
     This function sends a Discord embed message containing information about developer documentation and
@@ -1691,27 +1812,68 @@ async def devdocs(ctx):
     """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
-    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)", inline=False)
     embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
+### All the functions below this comment are to catch errors ###
+
 @bot.event
 async def on_command_error(ctx, error):
     """
-    This Python function prints a message when a user without the necessary permissions tries to use an
-    admin command.
+    The function `on_command_error` in a Python bot handles specific errors like `NotAdmin` and
+    `BannedPlayerCtx` by printing messages based on the type of error.
     
-    :param ctx: The `ctx` parameter in the `on_command_error` event represents the context in which the
-    command error occurred. It contains information about the message, the channel, the author of the
-    command, and more
+    :param ctx: The `ctx` parameter in the `on_command_error` event handler stands for the Context
+    object. It represents the context in which a command is being invoked, providing information about
+    the message, the channel, the author, and more. This context is essential for handling errors and
+    responding appropriately based on the
     :param error: The `error` parameter in the `on_command_error` event handler represents the error
-    that occurred when a command raised an exception. In the provided code snippet, the event handler
-    specifically checks if the error is an instance of `commands.CheckFailure`, which typically occurs
-    when a command check fails (e.g
+    that occurred when a command raises an exception. In your code snippet, you are checking the type of
+    the error using `isinstance` to handle specific types of errors, such as `NotAdmin` and `BannedPlayerCtx`
     """
-    if isinstance(error, commands.CheckFailure):# Would only be for admin commands right now
+    if isinstance(error, NotAdmin):# Would only be for admin commands right now
         print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
+    elif isinstance(error, BannedPlayerCtx):
+        if PRINT_BANNED_USER_USING_BOT:
+            print(f"{ctx.author.display_name}({ctx.author.id}) tried to use the bot while banned")
+        else:
+            pass
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error):
+    """
+    The function checks if a user is banned and prints a message if they try to use the bot.
+    
+    :param interaction: The `interaction` parameter represents the interaction that triggered the error.
+    In this case, it is of type `discord.Interaction`, which provides information about the interaction
+    between the user and the bot
+    :type interaction: discord.Interaction
+    :param error: The `error` parameter in the `on_app_command_error` function represents the error that
+    occurred when a user interacts with the bot. In this specific code snippet, the function is checking
+    if the error is an instance of `BannedPlayer`. If the error is indeed a `BannedPlayer`
+    """
+    if isinstance(error, BannedPlayer):
+        if PRINT_BANNED_USER_USING_BOT:
+            print(f"{interaction.user.display_name}({interaction.user.id}) tried to use the bot while banned")
+        else:
+            pass
+
+@bot.event
+async def on_disconnect():
+    """
+    The function `on_disconnect` is an event handler in a Discord bot that prints a message when the bot
+    disconnects from Discord.
+    """
+    print("Bot has disconnected from Discord")
+
+@bot.event
+async def on_resumed():
+    """
+    The function on_resumed() in a Python bot prints a message indicating successful reconnection.
+    """
+    print("Bot reconnected successfully")
 
 # make the website
 bot.run(TOKEN) # type: ignore
