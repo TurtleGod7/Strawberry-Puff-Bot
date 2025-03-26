@@ -7,7 +7,7 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
     The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
     semicolons, splits the string into individual pairs, extracts the keys and values, and returns a
     dictionary sorted by keys.
-    
+
     :param rollInfo: The `unpack_rolled_info` function takes a string `rollInfo` as input, which
     contains information about rolled items separated by semicolons. Each item is in the format
     "item_frequency", where "item" is the name of the item and "frequency" is the number of times it
@@ -18,7 +18,7 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
     """
     if rollInfo is None:
         return
-    
+
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
@@ -26,7 +26,7 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
             frequency[split.split("_")[0]] = int(split.split("_")[1])
         except:
             continue
-    
+
     return dict(sorted(frequency.items()))
 
 # The class `Puff` represents a character with attributes such as name, attack, health, owner, and
@@ -117,7 +117,7 @@ def get_lineup(user_id):
     """
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (user_id,)) 
+    cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (user_id,))
     cursor.execute("SELECT lineup FROM pvp_lineup WHERE username = ?", (user_id,))
     data = cursor.fetchone()[0]
     cursor.close()
@@ -128,7 +128,7 @@ def save_lineup(lineup, user_id):
     """
     The `save_lineup` function saves a lineup for a user in a database, formatting the lineup and
     updating the database with the user's ID.
-    
+
     :param lineup: The `save_lineup` function takes a lineup list and an optional user_id as parameters.
     The lineup list contains the elements that make up the lineup that needs to be saved. The user_id is
     an optional parameter that specifies the user for whom the lineup is being saved
@@ -140,7 +140,7 @@ def save_lineup(lineup, user_id):
     cursor = conn.cursor()
 
     formattedLineup = ";".join(lineup)
-    cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (user_id,)) 
+    cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (user_id,))
     cursor.execute("UPDATE pvp_lineup SET lineup = ? WHERE username = ?", (formattedLineup, user_id,))
 
     conn.commit()
@@ -151,7 +151,7 @@ def get_owned(user_id):
     """
     This Python function retrieves owned stats for a specific user from a database and returns the
     unpacked rolled information.
-    
+
     :param user_id: The get_owned function retrieves the rolled golds and normals stats for a specific
     user from a database. The user_id parameter is used to specify the username for which the stats are being retrieved
     :return: The function get_owned is returning a dictionary with the result of calling the
@@ -174,7 +174,7 @@ def battle(puff1: Puff, puff2: Puff):
     """
     This Python function simulates a battle between two Puff objects by reducing their health based on
     their attack values until one of them wins or it's a draw.
-    
+
     :param puff1: Puff object representing the first creature in the battle. It has attributes like
     name, health, attack, level, and owner
     :type puff1: Puff

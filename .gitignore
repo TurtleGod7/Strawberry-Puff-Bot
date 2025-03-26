@@ -1,6 +1,4 @@
 .env
 .vscode/settings.json
 .venv
-next
-oldhtml
 __pycache__

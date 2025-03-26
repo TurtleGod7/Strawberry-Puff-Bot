@@ -4,7 +4,7 @@ from os import name as os_name
 
 ### Control variables
 BANNED_HANDLER = daemons.BannedUsersHandler()
-PRINT_BANNED_USER_USING_BOT = False
+PRINT_EXTRA_ERROR_MESSAGES = False
 CHANGE_PROFILE = False
 STOP_PING_ON_STARTUP = True
 DEBUG = False

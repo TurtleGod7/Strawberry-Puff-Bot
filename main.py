@@ -5,17 +5,14 @@ from statistics import mean
 from math import ceil, floor
 from time import time, mktime
 from datetime import datetime
-import battlefunctions
-from flags import DEBUG, BANNER_START, BANNER_END, GIT_USERNAME, GIT_REPO, CHANGE_PROFILE
-from flags import AVATAR_PATH, BANNER_FILE, PITY_LIMIT, RARITY_WEIGHTS, LIMITED_WEIGHTS, STATUSES
-from flags import ITEMS_PER_PAGE, BUTTON_PAGE_EXPIRY, SETTINGS_EXPIRY, ASCENSION_MAX
-from flags import TABLE_CREATION, STOP_PING_ON_STARTUP, PRINT_BANNED_USER_USING_BOT
-from flags import COOLDOWN_TIME, BANNED_HANDLER
-import errorclasses
+from traceback import format_exc
 import discord
 from discord.ext import commands
 from discord.ext import tasks
 from dotenv import load_dotenv
+import battlefunctions
+import flags
+import errorclasses
 
 load_dotenv()
 
@@ -30,12 +27,12 @@ BannedPlayerCtx = errorclasses.BannedPlayerErrorCtx
 
 ### Global Variables that DON'T need to be changed
 weightsMultipier = {
-    0 : RARITY_WEIGHTS[0],
-    1 : RARITY_WEIGHTS[1],
-    2 : RARITY_WEIGHTS[2]*LIMITED_WEIGHTS[0],
-    3 : RARITY_WEIGHTS[2]*LIMITED_WEIGHTS[1],
-    4 : LIMITED_WEIGHTS[0], # When pity hits 100
-    5 : LIMITED_WEIGHTS[1], 
+    0 : flags.RARITY_WEIGHTS[0],
+    1 : flags.RARITY_WEIGHTS[1],
+    2 : flags.RARITY_WEIGHTS[2]*flags.LIMITED_WEIGHTS[0],
+    3 : flags.RARITY_WEIGHTS[2]*flags.LIMITED_WEIGHTS[1],
+    4 : flags.LIMITED_WEIGHTS[0], # When pity hits 100
+    5 : flags.LIMITED_WEIGHTS[1],
 }
 weightedColor = {
     -1: discord.Color.brand_red(),
@@ -70,7 +67,7 @@ async def dm_ping(user_id: int, message: str):
     """
     The function `dm_ping` sends a direct message to a user with a specified message, handling
     exceptions for user not found or permission issues.
-    
+
     :param user_id: The `user_id` parameter is an integer representing the unique identifier of the user
     to whom you want to send a direct message (DM)
     :type user_id: int
@@ -78,7 +75,7 @@ async def dm_ping(user_id: int, message: str):
     the user via direct message
     :type message: str
     :return: If an error occurs while fetching the user or sending the direct message, the function will
-    return without performing the DM action. If the user is not found (user is None), the function will 
+    return without performing the DM action. If the user is not found (user is None), the function will
     also return without sending the message.
     """
     try:
@@ -101,7 +98,7 @@ def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
     """
     The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
     semicolons, extracts the keys and values, and returns a dictionary sorted by keys.
-    
+
     :param rollInfo: The `rollInfo` parameter is a string that contains information about rolled items
     and their frequencies. Each item and its frequency are separated by an underscore, and each item is
     separated by a semicolon
@@ -131,7 +128,7 @@ def pack_rolled_info(frequency_dict: dict):
     """
     The function `pack_rolled_info` takes a dictionary `frequency_dict` as input and returns a string
     representation of the key-value pairs in the dictionary separated by semicolons.
-    
+
     :param frequency_dict: The `frequency_dict` parameter is a dictionary that contains the frequency of
     rolled items. Each key in the dictionary represents an item, and the corresponding value represents
     the frequency of that item being rolled
@@ -141,7 +138,7 @@ def pack_rolled_info(frequency_dict: dict):
     `key_value`. If the input `frequency_dict` is `None`, the function returns `None`. If the resulting
     string is empty, the function also returns `None`.
     """
-    if frequency_dict is None: 
+    if frequency_dict is None:
         return None
     return ";".join([f"{k}_{v}" for k, v in frequency_dict.items()]) or None
 
@@ -153,8 +150,8 @@ async def update_status():
     global activity_task_running
     activity_task_running = True
 
-    current_status = STATUSES.pop(0)
-    STATUSES.append(current_status)
+    current_status = flags.STATUSES.pop(0)
+    flags.STATUSES.append(current_status)
     await bot.change_presence(activity=current_status)
 
     activity_task_running = False
@@ -175,7 +172,7 @@ def is_banned_user(interaction: discord.Interaction):
     """
     The function `is_banned_user` checks if a user is banned based on their interaction and the banned
     time.
-    
+
     :param interaction: discord.Interaction
     :type interaction: discord.Interaction
     :return: The function `is_banned_user` is returning a boolean value. It returns `True` if the user
@@ -202,7 +199,7 @@ def is_banned_user_ctx():
 def flatten_list(nested_list):
     """
     The `flatten_list` function recursively flattens a nested list into a single flat list.
-    
+
     :param nested_list: The `flatten_list` function takes a nested list as input and recursively
     flattens it into a single list. If the input list contains nested lists or tuples, it will flatten those as
     well
@@ -217,10 +214,10 @@ def flatten_list(nested_list):
             flat_list.append(item)
     return flat_list
 
-def round_int(num: float): 
+def round_int(num: float):
     """
     The function `round_int` rounds a given number to the nearest integer based on the decimal value.
-    
+
     :param num: The `num` parameter is a float value that you want to round to the nearest integer.
     :type num: float
     :return: The function `round_int` returns the rounded integer value of the input number `num`. If the
@@ -231,39 +228,42 @@ def round_int(num: float):
     if point == -1:
         return int(num)
     checker = numberString[point+1]
-    if DEBUG:
+    sign = True if num <= 0 else False
+    if flags.DEBUG:
         print(f"number string: {numberString}\npoint index: {point}\nchecker: {checker}")
-    if int(checker) >= 5:
-        off = (10 - int(checker))*0.1
-        return round(num+off)
+    if int(checker) == 5:
+        if sign:
+            return round(num-0.5)
+        else:
+            return round(num+0.5)
     else:
         return round(num)
 
 @bot.event
 async def on_ready():
     """
-    The function sets up database tables, checks for debug mode, updates bot status, and sends direct
+    The function sets up database tables, checks for flags.DEBUG mode, updates bot status, and sends direct
     messages to users based on settings.
     """
     await bot.tree.sync()
     if update_status.is_running() is False:
         update_status.start()
-    
-    if DEBUG:
+
+    if flags.DEBUG:
         print(f"Discord version: {discord.__version__}")
         print("Registered commands:")
         for command in bot.tree.get_commands():
             print(f" - {command.name}")
-        print(f"DEBUG: Admin Users: {ADMIN_USERS}")
-    
+        print(f"flags.DEBUG: Admin Users: {ADMIN_USERS}")
+
     conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM puffs")
     global puff_list
     puff_list = flatten_list(cursor.fetchall())
-    if DEBUG:
+    if flags.DEBUG:
         print(f"List of puffs: {puff_list}")
-    if TABLE_CREATION:
+    if flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS puffs (
             "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
@@ -283,7 +283,7 @@ async def on_ready():
 
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
-    if TABLE_CREATION:
+    if flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stats (
             "username"	INTEGER PRIMARY KEY NOT NULL UNIQUE,
@@ -297,21 +297,21 @@ async def on_ready():
             "win"	INTEGER DEFAULT 0,
             "loss"	INTEGER DEFAULT 0,
             "totalBattles"	INTEGER DEFAULT 0,
-        )      
+        )
         """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS pity (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "pity" INTEGER NOT NULL DEFAULT 0
-        )               
+        )
         """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "DMonStartup" INTEGER NOT NULL DEFAULT 0
-        )               
+        )
         """)
 
         cursor.execute("""
@@ -336,10 +336,10 @@ async def on_ready():
         """)
 
         cursor.execute("PRAGMA journal_mode=WAL")
-        
+
         conn.commit()
     PeopletoDM = []
-    if not STOP_PING_ON_STARTUP:
+    if not flags.STOP_PING_ON_STARTUP:
         cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
         PeopletoDM = cursor.fetchall()
     global banned_users
@@ -350,27 +350,28 @@ async def on_ready():
     conn.close()
     for k in PeopletoDM:
         await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
-    if CHANGE_PROFILE:
-        if not path.exists(AVATAR_PATH):
+    if flags.CHANGE_PROFILE:
+        if not path.exists(flags.AVATAR_PATH):
             print("avatar .gif isn't found")
         else:
-            with open(AVATAR_PATH, "rb") as f:
+            with open(flags.AVATAR_PATH, "rb") as f:
                 avatar_img = f.read()
                 try:
                     await bot.user.edit(avatar=avatar_img) # type: ignore
                 except Exception as e:
                     print(f'{e}')
 
-        if not path.exists(f"assets\\profile\\{BANNER_FILE}" if os_name == "nt" else f"assets/profile/{BANNER_FILE}"):
+        if not path.exists(f"assets\\profile\\{flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{flags.BANNER_FILE}"):
             print("banner .gif isn't found")
         else:
-            with open(f"assets\\profile\\{BANNER_FILE}" if os_name == "nt" else f"assets/profile/{BANNER_FILE}", "rb") as f:
+            with open(f"assets\\profile\\{flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{flags.BANNER_FILE}", "rb") as f:
                 banner_img = f.read()
                 try:
                     await bot.user.edit(banner=banner_img) # type: ignore
                 except Exception as e:
                     print(f'{e}')
-    print(f'Logged in as {bot.user}')    
+
+    print(f'Logged in as {bot.user}')
 
 @bot.tree.command(name="puffroll", description="Roll a random puff")
 @discord.app_commands.check(is_banned_user)
@@ -378,7 +379,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     """
     This function rolls a random puff for a user in a Discord bot, handling rarity, statistics tracking,
     and generating an embed with the roll results.
-    
+
     :param interaction: The `interaction` parameter in the code snippet represents the interaction
     object that contains information about the user's interaction with the bot. It includes details such
     as the user who triggered the interaction, the type of interaction (e.g., command invocation), and
@@ -408,26 +409,26 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
     cursor = conn.cursor()
 
-    if int(pity) < PITY_LIMIT:
-        isRareval = choices([0,1,2], weights=RARITY_WEIGHTS, k=1)[0]
+    if int(pity) < flags.PITY_LIMIT:
+        isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
         if isRareval < 2:
             cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
             data =  cursor.fetchall()
             items, weights = zip(*data) # Randomly selects a weighted role (id)
             selected_id = choices(items, weights=weights, k=1)[0]
             cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-            choice = cursor.fetchone() # Gets the full info from the id 
+            choice = cursor.fetchone() # Gets the full info from the id
 
             cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRareval,))
             total_weight = cursor.fetchone()[0]
         else:
-            isLimitedval = choices([2,3], weights=LIMITED_WEIGHTS, k=1)[0]
+            isLimitedval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
             cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
             data =  cursor.fetchall()
             items, weights = zip(*data) # Randomly selects a weighted role (id)
             selected_id = choices(items, weights=weights, k=1)[0]
             cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-            choice = cursor.fetchone() # Gets the full info from the id 
+            choice = cursor.fetchone() # Gets the full info from the id
 
             cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
             total_weight = cursor.fetchone()[0]
@@ -436,13 +437,13 @@ async def roll_a_puff(interaction: discord.Interaction):
         cursor.close() # Gets info for the chance calculation
         conn.close()
     else:
-        isLimitedval = choices([2,3], weights=LIMITED_WEIGHTS, k=1)[0]
+        isLimitedval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
         cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
         data =  cursor.fetchall()
         items, weights = zip(*data) # Randomly selects a weighted role (id)
         selected_id = choices(items, weights=weights, k=1)[0]
         cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-        choice = cursor.fetchone() # Gets the full info from the id 
+        choice = cursor.fetchone() # Gets the full info from the id
 
         cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
         total_weight = cursor.fetchone()[0]
@@ -459,24 +460,22 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor = conn.cursor()
 
     cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
-    if cursor.fetchone()[0] == 0: 
+    if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO stats (username) VALUES (?)", (user_id,))
 
     cursor.execute("SELECT rolledGolds,rolledNormals FROM stats WHERE username = ?", (user_id,))
     rolledGolds, rolledNormals = cursor.fetchone()
-    frequencyGold = unpack_rolled_info(rolledGolds)
-    frequencyNormal = unpack_rolled_info(rolledNormals)
+    frequencyGold = unpack_rolled_info(rolledGolds, True)
+    frequencyNormal = unpack_rolled_info(rolledNormals, True)
 
     if isRare >= 2:
-        if frequencyGold is None: frequencyGold = {}
         ascension = frequencyGold.get(name, -1)
-        if ascension < ASCENSION_MAX:
+        if ascension < flags.ASCENSION_MAX:
             frequencyGold[name] = ascension+1
         frequencyGold = dict(sorted(frequencyGold.items()))
     else:
-        if frequencyNormal is None: frequencyNormal = {}
         ascension = frequencyNormal.get(name, -1)
-        if ascension < ASCENSION_MAX:
+        if ascension < flags.ASCENSION_MAX:
             frequencyNormal[name] = ascension+1
         frequencyNormal = dict(sorted(frequencyNormal.items()))
 
@@ -498,9 +497,9 @@ async def roll_a_puff(interaction: discord.Interaction):
     elif int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
 
-    cursor.execute("UPDATE stats SET rolledGolds = ?, rolledNormals = ? WHERE username = ?", (pack_rolled_info(frequencyGold), pack_rolled_info(frequencyNormal), user_id))    
+    cursor.execute("UPDATE stats SET rolledGolds = ?, rolledNormals = ? WHERE username = ?", (pack_rolled_info(frequencyGold), pack_rolled_info(frequencyNormal), user_id))
     cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))
-    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,)) 
+    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,))
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
 
@@ -512,7 +511,7 @@ async def roll_a_puff(interaction: discord.Interaction):
         1 : "st",
         2 : "nd"
     }
-    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -539,7 +538,7 @@ async def get_pity(interaction: discord.Interaction):
     """
     This Python function retrieves a user's pity value from a database and sends it as an embedded
     message in response to a Discord interaction.
-    
+
     :param interaction: The `interaction` parameter in the code snippet represents the interaction
     between the user and the bot. It contains information about the user who triggered the command, the
     context of the interaction, and any data associated with the interaction. In this specific context,
@@ -563,7 +562,7 @@ async def statistics(interaction: discord.Interaction):
     """
     This Python function retrieves and displays statistics related to a user's rolls in a gacha game
     using Discord interactions.
-    
+
     :param interaction: The `interaction` parameter in the `statistics` command function represents the
     interaction between the user and the bot. It contains information about the user who triggered the
     command, the context in which the command was triggered, and allows the bot to respond to the user
@@ -573,7 +572,7 @@ async def statistics(interaction: discord.Interaction):
     cursor = conn.cursor()
     user_id = interaction.user.id
 
-    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))    
+    cursor.execute("SELECT EXISTS (SELECT 1 FROM stats WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO stats (username) VALUES (?)", (user_id,))
         conn.commit()
@@ -584,7 +583,7 @@ async def statistics(interaction: discord.Interaction):
 
     cursor.close()
     conn.close()
-    
+
     if losses == 0: losses+=1 # In case of division by 0
     frequency = {}
     if None is not rolledGolds:
@@ -615,20 +614,20 @@ async def statistics(interaction: discord.Interaction):
 # pagination controls in a Discord bot.
 class DropRatesView(discord.ui.View):
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
-        super().__init__(timeout=BUTTON_PAGE_EXPIRY)
+        super().__init__(timeout=flags.BUTTON_PAGE_EXPIRY)
         self.items = items
         self.total_weight0 = total_weight0
         self.total_weight1 = total_weight1
         self.total_weight2 = total_weight2
         self.total_weight3 = total_weight3
         self.page = 0
-        self.items_per_page = ITEMS_PER_PAGE
+        self.items_per_page = flags.ITEMS_PER_PAGE
 
     def generate_embed(self):
         isRaretoWeight = {0:self.total_weight0, 1:self.total_weight1, 2:self.total_weight2, 3:self.total_weight3,}
-        
+
         embed = discord.Embed(title="📊 Puff Drop Rates", color=discord.Color.gold())
-        
+
         start = self.page * self.items_per_page
         end = start + self.items_per_page
         page_items = self.items[start:end]
@@ -639,7 +638,7 @@ class DropRatesView(discord.ui.View):
             elif isRare == 2: embed.add_field(name=name+" :yellow_square:", value=chance, inline=False)
             elif isRare == 1: embed.add_field(name=name+" :purple_square:", value=chance, inline=False)
             else: embed.add_field(name=name+" :blue_square:", value=chance, inline=False)
-            
+
 
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items) // self.items_per_page + 1}")
         return embed
@@ -662,7 +661,7 @@ async def drop_rates(interaction: discord.Interaction):
     """
     This Python function retrieves data from a SQLite database and calculates the chances for each
     category of puffs, then sends the information in an embed message.
-    
+
     :param interaction: The `interaction` parameter in the code snippet represents the interaction with
     the user in a Discord context. In this case, it is used to handle the interaction triggered by the
     user invoking the `/chances` command. The interaction object contains information about the user,
@@ -697,7 +696,7 @@ async def suggestions(interaction: discord.Interaction):
     """
     The `suggestions` function in the Python code provides a command for users to suggest new ideas for
     the bot by directing them to a Google Form through an embedded message.
-    
+
     :param interaction: The `interaction` parameter in the `suggestions` command represents the
     interaction that triggered the command. In this case, it is a Discord interaction, which allows the
     bot to respond to user input or commands in a Discord server
@@ -709,11 +708,11 @@ async def suggestions(interaction: discord.Interaction):
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
 @discord.app_commands.check(is_banned_user)
-async def help(interaction: discord.Interaction):
+async def docs(interaction: discord.Interaction):
     """
     The `help` function in this Python code provides a list of commands and their descriptions for
     assisting users with the bot's functionalities.
-    
+
     :param interaction: The `interaction` parameter in the `help` command function represents the
     interaction between the user and the bot. It contains information about the user who triggered the
     command, the context of the interaction, and allows the bot to respond back to the user with
@@ -722,7 +721,7 @@ async def help(interaction: discord.Interaction):
     """
     embed = discord.Embed(title="Techsupport is on the way!", color=discord.Color.greyple())
     embed.add_field(
-        name="/puffroll", 
+        name="/puffroll",
         value="This is the major mechanic of this bot and this is how you set up your local account."
     )
     embed.add_field(
@@ -730,23 +729,23 @@ async def help(interaction: discord.Interaction):
         value="See your pity, refer to /info if you don't know what pity is"
     )
     embed.add_field(
-        name="/statistics", 
+        name="/statistics",
         value="This is the statistics function so you can understand more about your luck."
     )
     embed.add_field(
-        name="/chances", 
+        name="/chances",
         value="This is the chances function that displays information for each puff."
     )
     embed.add_field(
-        name="/suggestions", 
+        name="/suggestions",
         value="Use this function to give us any suggestions"
     )
     embed.add_field(
-        name="/info", 
+        name="/info",
         value="Function that provides valuable details and information about how this bot works"
     )
     embed.add_field(
-        name="/settings", 
+        name="/settings",
         value="Use this function to change any settings you want with the bot"
     )
     embed.add_field(
@@ -787,7 +786,7 @@ async def information(interaction: discord.Interaction):
     """
     The `information` function provides helpful information about rarities, saving data, the gacha
     system, etc. in a Discord embed format.
-    
+
     :param interaction: The `interaction` parameter in the `information` function represents the
     interaction between the user and the bot. It contains information about the user who triggered the
     command, the channel where the interaction occurred, and other relevant details needed to respond to
@@ -796,33 +795,33 @@ async def information(interaction: discord.Interaction):
     """
     embed = discord.Embed(title="Good to know information", color=discord.Color.dark_orange())
     embed.add_field(
-        name="Rarities", 
-        value="1. <:gray_square:1342727158673707018> is a limited puff (highest rarity)\n2. :yellow_square: is a gold rarity puff which is the next highest\u200b\n3. :purple_square: is a purple rarity puff that is the third rarest puff to get\u200b\n4. Finally a :blue_square: is a blue rarity puff that is the most common type to get\nPlease check the `/chances` function to see what they correlate to.", 
+        name="Rarities",
+        value="1. <:gray_square:1342727158673707018> is a limited puff (highest rarity)\n2. :yellow_square: is a gold rarity puff which is the next highest\u200b\n3. :purple_square: is a purple rarity puff that is the third rarest puff to get\u200b\n4. Finally a :blue_square: is a blue rarity puff that is the most common type to get\nPlease check the `/chances` function to see what they correlate to.",
         inline=False
     )
     embed.add_field(
         name="How is information saved?",
-        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specific (AKA Discord-wide)\n\nThis means that lets say you roll a puff in another server, this will affect your experience in this server.", 
+        value="Information like\n* amount of rolls\n* pity\n* types of rolls\nare **NOT** server specific (AKA Discord-wide)\n\nThis means that lets say you roll a puff in another server, this will affect your experience in this server.",
         inline=False
     )
     embed.add_field(
         name="Gacha system",
-        value=f"This system works by initially rolling for the rarity at weights of **{RARITY_WEIGHTS[2]*100}**%, **{RARITY_WEIGHTS[1]*100}**%, and **{RARITY_WEIGHTS[0]*100}**% from least common to common rarities. Then if you roll in the {RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited which is at **{LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
+        value=f"This system works by initially rolling for the rarity at weights of **{flags.RARITY_WEIGHTS[2]*100}**%, **{flags.RARITY_WEIGHTS[1]*100}**%, and **{flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. Then if you roll in the {flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
         inline=False
     )
     embed.add_field(
         name="Pity system",
-        value=f"When you reach **{PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function.",
+        value=f"When you reach **{flags.PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function.",
         inline=False
     )
     embed.add_field(
         name="Ascensions",
-        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{ASCENSION_MAX}** ascension. These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended.",
+        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{flags.ASCENSION_MAX}** ascension. These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended.",
         inline=False
     )
     embed.add_field(
         name="Comparison calculations",
-        value="This works by comparing your rolls to another user, so you can see how lucky you are compared to them. This is done by comparing the amount of rolls, limited rarity puffs, gold rarity puffs, purple rarity puffs, the average pity, and ascensions.\nAlso, the embed color signifies if on average if you have better stats. It's calculated by having each value better as 1 and worse as -1. First it starts with the mean of each ascension together. that value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. (**less** is better for pity/rolls, everything else, **more**) is better\n-# Please check `/statistics` for what you've rolled.",
+        value="This works by comparing your rolls to another user, so you can see how lucky you are compared to them. This is done by comparing the amount of rolls, limited rarity puffs, gold rarity puffs, purple rarity puffs, the average pity, and ascensions.\nAlso, the embed color signifies if on average if you have better stats. It's calculated by having each value better as 1 and worse as -1. First it starts with the mean of each ascension together. that value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. (**less** is better for pity/rolls, everything else, **more** is better)\n-# Please check `/statistics` for what you've rolled.",
         inline=False
     )
     embed.add_field(
@@ -831,14 +830,14 @@ async def information(interaction: discord.Interaction):
         inline=False
     )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-    
+
     await interaction.response.send_message(embed=embed)
 
 # The `SettingsView` class in Python represents a view for selecting and updating user settings with
 # options to notify about bot startup and Gold/Limited Rarity puff rolls.
 class SettingsView(discord.ui.View):
     def __init__(self, user_id):
-        super().__init__(timeout=SETTINGS_EXPIRY)  # View expires after 60 seconds
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)  # View expires after 60 seconds
         self.user_id = user_id
 
     @discord.ui.select(
@@ -854,16 +853,19 @@ class SettingsView(discord.ui.View):
         db_path = "assets\\database\\users.db" if os_name == "nt" else "assets/database/users.db"
         conn = connect(db_path, check_same_thread=False)
         cursor = conn.cursor()
-
         settingsDict = {
             0: "DMonStartup",
             1: "PingonGold",
         }
-
-        cursor.execute(f"SELECT {settingsDict.get(value)} FROM settings WHERE username = ?", (self.user_id,))
-        current_value = cursor.fetchone()[0]
-
-        new_value = current_value ^ 1
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (self.user_id,))
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("INSERT INTO settings (username) VALUES (?)", (self.user_id,))
+            conn.commit()
+            new_value = 1 # Guarenteed to be 1 since the user is new
+        else:
+            cursor.execute(f"SELECT {settingsDict.get(value)} FROM settings WHERE username = ?", (self.user_id,))
+            current_value = cursor.fetchone()[0]
+            new_value = current_value ^ 1
 
         cursor.execute(f"UPDATE settings SET {settingsDict.get(value)} = ? WHERE username = ?", (new_value, self.user_id))
 
@@ -881,7 +883,7 @@ class SettingsView(discord.ui.View):
 async def settings(interaction: discord.Interaction):
     """
     The function sets up user settings in a database and sends a message with options to the user.
-    
+
     :param interaction: The `interaction` parameter in your `settings` command function represents the
     interaction that triggered the command. It contains information about the user who interacted with
     the bot, the channel where the interaction occurred, and other relevant details. In this case, you
@@ -889,19 +891,6 @@ async def settings(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     user_id = interaction.user.id
-
-    db_path = "assets\\database\\users.db" if os_name == "nt" else "assets/database/users.db"
-    conn = connect(db_path, check_same_thread=False)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))    
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO settings (username, DMonStartup, PingonGold) VALUES (?,?)", (user_id, 0, 0))
-        conn.commit()
-
-    cursor.close()
-    conn.close()
-
     await interaction.response.send_message("Choose an option below:", view=SettingsView(user_id), ephemeral=True)
 
 @bot.tree.command(name="banner", description="Show the current limited puff banner")
@@ -910,7 +899,7 @@ async def showBanner(interaction: discord.Interaction):
     """
     This Python function displays the current limited puff banner with its start and end dates, time
     remaining, and the user who requested it.
-    
+
     :param interaction: The `interaction` parameter in the `showBanner` function represents the
     interaction between the user and the bot. It contains information about the user who triggered the
     command, the context of the interaction, and allows the bot to respond back to the user with
@@ -918,13 +907,13 @@ async def showBanner(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     now  = int(time())
-    start_time = int(mktime(datetime.strptime(BANNER_START, "%m/%d/%Y").timetuple()))
-    end_time = int(mktime(datetime.strptime(BANNER_END, "%m/%d/%Y").timetuple()))
+    start_time = int(mktime(datetime.strptime(flags.BANNER_START, "%m/%d/%Y").timetuple()))
+    end_time = int(mktime(datetime.strptime(flags.BANNER_END, "%m/%d/%Y").timetuple()))
     delta_time = end_time - now
     delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
 
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-    embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/profile/{BANNER_FILE}?=raw")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/profile/{flags.BANNER_FILE}?=raw")
     embed.add_field(name="Banner Dates", value=f"Start: <t:{start_time}:F>\nEnd: <t:{end_time}:F>\nTime till end: {delta_time}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -935,7 +924,7 @@ async def pring(ctx, *, arg):
     """
     The above Python function defines a command for a bot that sends a message with the input argument
     provided by the user.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the context in which the command is
     being invoked. It contains information about the message, the channel, the author, and other
     relevant details related to the command execution
@@ -951,7 +940,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     """
     This function compares the puff rolls and statistics of the user invoking the command with another
     specified user and displays the differences in a formatted embed message.
-    
+
     :param interaction: The `interaction` parameter in the `compare` command function represents the
     interaction that triggered the command. It contains information about the user who triggered the
     command, the channel where the interaction occurred, and other relevant details related to the
@@ -1047,7 +1036,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
 async def github(interaction: discord.Interaction):
     """
     This Python function sends the GitHub link for the bot to the user in a Discord interaction.
-    
+
     :param interaction: The `interaction` parameter in the code snippet represents the interaction
     object that contains information about the user's interaction with the bot, such as the user who
     triggered the command, the channel where the interaction occurred, and any options or data provided
@@ -1055,7 +1044,7 @@ async def github(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     embed = discord.Embed(title="Github", color=discord.Color.random())
-    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{GIT_USERNAME}/{GIT_REPO}")
+    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.command()
@@ -1063,7 +1052,7 @@ async def github(interaction: discord.Interaction):
 async def skater(ctx, *, arg):
     """
     The function sends a message with the input argument followed by a skater emoji.
-    
+
     :param ctx: ctx represents the context in which the command is being invoked. It contains
     information about the message, the channel, the author, and other relevant details that can be used
     to interact with the user or perform actions within the Discord server
@@ -1076,7 +1065,7 @@ async def skater(ctx, *, arg):
 # This class defines buttons for rearranging a lineup and selecting new puffs in a Discord UI.
 class LineupSetupButtons(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=SETTINGS_EXPIRY)
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
 
     @discord.ui.button(label="🛠️ Rearrange Lineup", style=discord.ButtonStyle.primary)
     async def rearrange_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1094,7 +1083,7 @@ class LineupSetupButtons(discord.ui.View):
 # provided list, and handles the callback to save the selected puffs to a database.
 class PuffDropdown(discord.ui.View):
     def __init__(self, puff_list: dict):
-        super().__init__(timeout=SETTINGS_EXPIRY)
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.puff_list = puff_list
 
         # Create dropdown directly in the View
@@ -1133,7 +1122,7 @@ class PuffDropdown(discord.ui.View):
 # lineup with interactive callbacks for selecting and moving items.
 class RearrangeDropdown(discord.ui.View):
     def __init__(self, lineup: list):
-        super().__init__(timeout=SETTINGS_EXPIRY)
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.lineup = lineup
 
         # Ensure lineup has at least 1 puff, otherwise disable the dropdown
@@ -1205,7 +1194,7 @@ async def setup_lineup(interaction: discord.Interaction):
     """
     This Python function sets up or rearranges a user's lineup by fetching their puffs from the database
     and displaying interactive dropdowns for lineup setup.
-    
+
     :param interaction: The `interaction` parameter in your `setup_lineup` command represents the
     interaction that triggered the command. It contains information about the user who interacted with
     the command, the channel where the interaction occurred, and other relevant details. You can use
@@ -1218,7 +1207,7 @@ async def setup_lineup(interaction: discord.Interaction):
 
 class BattleConfirmView(discord.ui.View):
     def __init__(self, challenger, opponent):
-        super().__init__(timeout=SETTINGS_EXPIRY)
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.challenger = challenger
         self.opponent = opponent
         self.result = None
@@ -1228,7 +1217,7 @@ class BattleConfirmView(discord.ui.View):
         if interaction.user.id == self.opponent.id:
             self.result = True
             await interaction.response.edit_message(
-                content=f"⚔️ Battle confirmed between {self.challenger.mention} and {self.opponent.mention}!", 
+                content=f"⚔️ Battle confirmed between {self.challenger.mention} and {self.opponent.mention}!",
                 view=None
             )
             self.stop()
@@ -1240,7 +1229,7 @@ class BattleConfirmView(discord.ui.View):
         if interaction.user.id == self.opponent.id:
             self.result = False
             await interaction.response.edit_message(
-                content=f"❌ {self.opponent.mention} declined the battle!", 
+                content=f"❌ {self.opponent.mention} declined the battle!",
                 view=None
             )
             self.stop()
@@ -1259,7 +1248,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     """
     The `battle_command` function in a Python Discord bot allows users to battle against each other
     using their saved lineups of Puff objects.
-    
+
     :param interaction: The `interaction` parameter in the `battle_command` function represents the
     interaction between the user and the bot. It contains information about the user who triggered the
     command, the channel where the interaction occurred, and other relevant details needed to respond to
@@ -1292,8 +1281,8 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
 
     if result:
         last_used = result[0]
-        if current_time - last_used < COOLDOWN_TIME:
-            remaining_time = COOLDOWN_TIME - (current_time - last_used)
+        if current_time - last_used < flags.COOLDOWN_TIME:
+            remaining_time = flags.COOLDOWN_TIME - (current_time - last_used)
             await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             conn.close()
             return
@@ -1348,7 +1337,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     overall_score = round_int(mean(scores))
     color = weightedColor.get(overall_score)
     winner = interaction.user.display_name
-    if overall_score < 0: 
+    if overall_score < 0:
         winner = opponent.display_name
     elif overall_score == 0:
         winner = ""
@@ -1383,7 +1372,7 @@ async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     """
     This Python function retrieves a user's owned puffs and lineup from a database, formats the data
     into an embed message, and sends it as a response to a Discord interaction.
-    
+
     :param interaction: The `interaction` parameter in the `get_lineup` function represents the
     interaction that triggered the command. It contains information about the user who triggered the
     command, the channel where the interaction occurred, and other relevant details needed to respond to
@@ -1411,7 +1400,7 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
     """
     The function `item_autocomplete` suggests items that match what the user types based on a list of
     items called `puff_list`.
-    
+
     :param interaction: The `interaction` parameter in the `item_autocomplete` function represents the
     interaction that triggered the autocomplete request. This interaction contains information about the
     user, the command that was invoked, and any data associated with the interaction. It allows you to
@@ -1426,14 +1415,14 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
     `puff_list` that contain the user input (case-insensitive match). The choices are created by
     splitting the items in `puff_list` by spaces and joining them with underscores.
     """
-    if DEBUG:
+    if flags.DEBUG:
         print(f"info being entered for autocomplete {current}")
         print(f"First few puffs in puff_list {puff_list[:5]}")
     choices= [
         discord.app_commands.Choice(name=puff, value="_".join(puff.split(" ")))
         for puff in puff_list
         if current.lower() in puff.lower()]
-    if DEBUG:
+    if flags.DEBUG:
         for choice in choices:
             print(f"Choice: name='{choice.name}', value='{choice.value}'")
     return choices
@@ -1446,7 +1435,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     """
     This Python function previews a puff by fetching its data from a database and creating an embed with
     relevant information and an image.
-    
+
     :param interaction: The `interaction` parameter in the code snippet represents the interaction
     between the user and the bot. It contains information about the user's input, the command invoked,
     and other relevant details needed to process and respond to the user's request effectively
@@ -1469,7 +1458,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     embed.add_field(name="Stats", value=f"Health: {stats.split(';')[1]}\nAttack: {stats.split(';')[0]}")
-    embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
@@ -1480,7 +1469,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     """
     This function retrieves information about a specific item or character and displays it in an
     embedded message, including details like name, description, rarity, and image.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
     being invoked. It contains information about the message, the channel, the author of the message,
     and other relevant details needed to process the command effectively
@@ -1493,7 +1482,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     """
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-        embed.set_image(url=f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
+        embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
@@ -1504,7 +1493,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     cursor.execute("SELECT name, description, isRare FROM puffs WHERE imagepath = ?", (file,))
     name, description, isRare = cursor.fetchone()
     cursor.close()
-    conn.close()  
+    conn.close()
     rareColors = {
         0 : discord.Color.blue(),
         1 : discord.Color.purple(),
@@ -1513,7 +1502,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     }
     chance = 100
     pity = None
-    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -1537,7 +1526,7 @@ async def activity_change(ctx):
     """
     This Python function checks if an activity task is already running, restarts it if not, and sends a
     message indicating the status change.
-    
+
     :param ctx: ctx stands for Context, which represents the context in which a command is being
     invoked. It contains information about the message, the channel, the author of the message, and
     more. In Discord.py, it is used to interact with the Discord API and send responses back to the user
@@ -1558,7 +1547,7 @@ async def activity_change(ctx):
 async def statsof(ctx, arg: discord.User):
     """
     This function retrieves and displays statistics related to a user's activity in a puff gacha game.
-    
+
     :param ctx: ctx represents the context in which a command is being invoked. It provides information
     about the message, the channel, the author, and more. In this case, it is used to send a response
     back to the user who triggered the command
@@ -1615,7 +1604,7 @@ async def createacct(ctx, table, arg: discord.User):
     """
     This Python function creates an account for a specified user in a specified table within a database,
     checking if the account already exists before insertion.
-    
+
     :param ctx: The `ctx` parameter in the `createacct` command function represents the context in which
     the command was invoked. It contains information about the message, the channel, the author of the
     message, and other relevant details needed to process and respond to the command effectively
@@ -1644,7 +1633,7 @@ async def deleteacct(ctx, table, arg: discord.User):
     """
     This Python function deletes a user account from a specified table in a database based on the user's
     ID.
-    
+
     :param ctx: The `ctx` parameter in the `deleteacct` command function represents the context in which
     the command was invoked. It contains information about the message, the channel, the author of the
     message, and more. This context is essential for interacting with the Discord API and sending
@@ -1671,11 +1660,11 @@ async def deleteacct(ctx, table, arg: discord.User):
 
 @bot.command()
 @is_authorised_user()
-async def getdata(ctx, *, arg:ToLowerConverter):
+async def getdata(ctx, *, arg: ToLowerConverter):
     """
     This Python function retrieves data from a SQLite database based on a given argument, constructs an
     embed with the retrieved information, and sends it as a message in a Discord channel.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
     being invoked. It contains information about the message, the channel, the author, and other
     relevant details needed to process the command within a Discord bot
@@ -1692,9 +1681,9 @@ async def getdata(ctx, *, arg:ToLowerConverter):
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRare,))
     rarityWeight = cursor.fetchone()[0]
     cursor.close()
-    conn.close()  
+    conn.close()
 
-    image_path = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
     weightString = f"{rarityWeight*weightsMultipier.get(isRare)}%"
     if isRare >= 2:
         weightString += f" and {weightsMultipier.get(isRare+2)}%"
@@ -1715,7 +1704,7 @@ async def getlineup(ctx, arg: discord.User):
     """
     This Python function retrieves data from a SQLite database based on a given argument through another module,
     constructs an embed with the retrieved information, and sends it as a message in a Discord channel.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the context in which a command is
     being invoked. It contains information about the message, the channel, the author, and other
     relevant details needed to process the command within a Discord bot
@@ -1740,7 +1729,7 @@ async def getlineup(ctx, arg: discord.User):
 async def ban(ctx, arg:discord.User, seconds: int):
     """
     This Python function is used to ban a user if they aren't currently banned and their ban has expired.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the Context object. It provides
     information about the current state of the bot and the invocation context of the command being
     executed. It includes details such as the message, the channel, the author of the message, and more.
@@ -1753,7 +1742,7 @@ async def ban(ctx, arg:discord.User, seconds: int):
     if banned_time is None or banned_time < time():
         banned_users[arg.id] = time() + seconds
         await ctx.send(f"{arg.display_name} has been banned for {seconds} seconds")
-        BANNED_HANDLER.add_data([(arg.id, time() + seconds)])
+        flags.BANNED_HANDLER.add_data([(arg.id, time() + seconds)])
     else:
         await ctx.send(f"{arg.display_name} is already banned for {banned_time - time()} seconds")
 
@@ -1763,7 +1752,7 @@ async def unban(ctx, arg:discord.User):
     """
     This Python function is used to unban a user if they are currently banned and their ban has not
     expired.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the Context object. It provides
     information about the current state of the bot and the invocation context of the command being
     executed. It includes details such as the message, the channel, the author of the message, and more.
@@ -1776,7 +1765,7 @@ async def unban(ctx, arg:discord.User):
     if banned_time is not None and banned_time > time():
         banned_users[arg.id] = time() - 1
         await ctx.send(f"{arg.display_name} has been unbanned")
-        BANNED_HANDLER.add_data([(arg.id, time() - 1)])
+        flags.BANNED_HANDLER.add_data([(arg.id, time() - 1)])
     else:
         await ctx.send(f"{arg.display_name} is not banned or the ban has expired")
 
@@ -1786,7 +1775,7 @@ async def devdocs(ctx):
     """
     This function sends a Discord embed message containing information about developer documentation and
     commands to authorized users.
-    
+
     :param ctx: The `ctx` parameter in the code snippet represents the context in which the command is
     being invoked. It contains information about the message, the channel, the author of the message,
     and other relevant details needed to process the command within the Discord environment
@@ -1805,7 +1794,7 @@ async def on_command_error(ctx, error):
     """
     The function `on_command_error` in a Python bot handles specific errors like `NotAdmin` and
     `BannedPlayerCtx` by printing messages based on the type of error.
-    
+
     :param ctx: The `ctx` parameter in the `on_command_error` event handler stands for the Context
     object. It represents the context in which a command is being invoked, providing information about
     the message, the channel, the author, and more. This context is essential for handling errors and
@@ -1817,10 +1806,11 @@ async def on_command_error(ctx, error):
     if isinstance(error, NotAdmin):# Would only be for admin commands right now
         print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
     elif isinstance(error, BannedPlayerCtx):
-        if PRINT_BANNED_USER_USING_BOT:
+        if flags.PRINT_EXTRA_ERROR_MESSAGES:
             print(f"{ctx.author.display_name}({ctx.author.id}) tried to use the bot while banned")
-        else:
-            pass
+    elif isinstance(error, commands.errors.CommandNotFound):
+        if flags.PRINT_EXTRA_ERROR_MESSAGES:
+            print(f"{ctx.author.display_name}({ctx.author.id}) tried to use a command that doesn't exist")
     else:
         raise error
 
@@ -1828,7 +1818,7 @@ async def on_command_error(ctx, error):
 async def on_app_command_error(interaction: discord.Interaction, error):
     """
     The function checks if a user is banned and prints a message if they try to use the bot.
-    
+
     :param interaction: The `interaction` parameter represents the interaction that triggered the error.
     In this case, it is of type `discord.Interaction`, which provides information about the interaction
     between the user and the bot
@@ -1838,10 +1828,8 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     if the error is an instance of `BannedPlayer`. If the error is indeed a `BannedPlayer`
     """
     if isinstance(error, BannedPlayer):
-        if PRINT_BANNED_USER_USING_BOT:
+        if flags.PRINT_EXTRA_ERROR_MESSAGES:
             print(f"{interaction.user.display_name}({interaction.user.id}) tried to use the bot while banned")
-        else:
-            pass
     else:
         raise error
 
@@ -1851,14 +1839,24 @@ async def on_disconnect():
     The function `on_disconnect` is an event handler in a Discord bot that prints a message when the bot
     disconnects from Discord.
     """
-    print("Bot has disconnected from Discord")
+    print(f"Bot has disconnected from Discord at {datetime.now()}")
 
 @bot.event
 async def on_resumed():
     """
     The function on_resumed() in a Python bot prints a message indicating successful reconnection.
     """
-    print("Bot reconnected successfully")
+    print(f"Bot reconnected successfully at {datetime.now()}")
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    error_details = format_exc()
+
+    if "ClientConnectorDNSError" in error_details:
+        print("Network error: Failed to reconnect to Discord!")
+    else:
+        print(f"🚨 Error in {event}:")
+        print(error_details)
 
 # make the website
 bot.run(TOKEN) # type: ignore
