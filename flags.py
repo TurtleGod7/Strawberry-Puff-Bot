@@ -6,7 +6,7 @@ from os import name as os_name
 BANNED_HANDLER = daemons.BannedUsersHandler()
 PRINT_EXTRA_ERROR_MESSAGES = False
 CHANGE_PROFILE = False
-STOP_PING_ON_STARTUP = True
+STOP_PING_ON_STARTUP = False
 DEBUG = False
 TABLE_CREATION = False
 PITY_LIMIT = 200

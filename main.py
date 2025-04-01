@@ -13,7 +13,9 @@ from dotenv import load_dotenv
 import battlefunctions
 import flags
 import errorclasses
+from daemons import SleepPrevention
 
+SleepPrevention()
 load_dotenv()
 
 TOKEN = getenv("DISCORD_TOKEN")

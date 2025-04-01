@@ -1,8 +1,11 @@
 from sqlite3 import connect
 from os import name as os_name
+from platform import uname as os_uname
 from time import sleep
 from threading import Thread, Lock
 from atexit import register
+from ctypes import windll
+from subprocess import Popen
 
 class BannedUsersHandler:
     def __init__(self, db_name="users.db", interval=1800):
@@ -47,6 +50,37 @@ class BannedUsersHandler:
 
     def close(self):
         """Ensure data is saved and connection closed properly on exit."""
-        print("Closing database and committing any remaining data")
+        print("Closing database and committing any remaining data\n")
         self.save_data()  # Save one last time
         self.conn.close()
+
+class SleepPrevention:
+    def __init__(self):
+        """Initialize the command shell to not let the system sleep."""
+        self.sleep_proc = None
+        self._start_commit_thread()
+
+    def _prevent_sleep(self):
+        """Prevent system from sleeping depending on OS."""
+        if os_name == "nt":  # Windows
+            ES_CONTINUOUS = 0x80000000
+            ES_SYSTEM_REQUIRED = 0x00000001
+            while True:
+                self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+        elif os_uname().system == "Darwin":  # macOS
+            self.sleep_proc = Popen(["caffeinate"])  # Keeps system awake
+        elif os_uname().system == "Linux":  # Linux
+            self.sleep_proc = Popen(["systemd-inhibit", "--what=idle", "--who=bot", "--why=Prevent bot sleep", "bash", "-c", "while true; do sleep 60; done"])
+        else:
+            print("⚠️ Sleep prevention not supported on this OS.")
+
+    def close(self):
+        """Ensure background processes terminate when bot stops."""
+        if self.sleep_proc:
+            self.sleep_proc.terminate()  # Kill sleep prevention process
+            print("💤 Sleep prevention disabled.\n")
+
+    def _start_commit_thread(self):
+        """Start the background commit thread."""
+        commit_thread = Thread(target=self._prevent_sleep, daemon=True)
+        commit_thread.start()
