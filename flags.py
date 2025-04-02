@@ -1,3 +1,4 @@
+import platform
 from discord import Activity, ActivityType
 import daemons
 from os import name as os_name
@@ -16,10 +17,11 @@ BUTTON_PAGE_EXPIRY = 60
 ITEMS_PER_PAGE = 5
 SETTINGS_EXPIRY = 60
 ASCENSION_MAX = 10
-AVATAR_PATH = "assets\\puffs\\strawberry.png" if os_name == "nt" else "assets/puffs/strawberry.png" # This and banner to be used when setting it as a gif
-BANNER_FILE = "banner_angel.gif"
-BANNER_START = "3/2/2025"
-BANNER_END = "4/1/2025"
+AVATAR_PATH = "assets\\puffs\\luna.png" if os_name == "nt" else "assets/puffs/luna.png" # This and banner to be used when setting it as a gif
+BANNER_FILE = "banner_demon.gif"
+BANNER_NAME = BANNER_FILE.split('_')[1].split('.')[0].capitalize() + " Puff"  # Extract name from banner file
+BANNER_START = "4/2/2025"
+BANNER_END = "5/1/2025"
 RARITY_WEIGHTS = [.887, .083, .03]
 LIMITED_WEIGHTS = [.8, .2]
 STATUSES = [
@@ -53,6 +55,11 @@ STATUSES = [
         name="for max ascension puffs",
         state="I heard that the max ascension puff is rare to have. If only spamming this bot wasn't allowed, it would be even rarer"
     ),
+    Activity(
+        type=ActivityType.custom,
+        name=f"The new banner is for the {BANNER_NAME.lower()}",
+        state="Make sure to check it out before it ends!",
+    )
 ]
 COOLDOWN_TIME = 30  # Cooldown in seconds
 ###

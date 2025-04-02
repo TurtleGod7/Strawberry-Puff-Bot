@@ -50,7 +50,7 @@ class BannedUsersHandler:
 
     def close(self):
         """Ensure data is saved and connection closed properly on exit."""
-        print("Closing database and committing any remaining data\n")
+        print("Closing database and committing any remaining data")
         self.save_data()  # Save one last time
         self.conn.close()
 
@@ -65,8 +65,7 @@ class SleepPrevention:
         if os_name == "nt":  # Windows
             ES_CONTINUOUS = 0x80000000
             ES_SYSTEM_REQUIRED = 0x00000001
-            while True:
-                self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+            while True: self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
         elif os_uname().system == "Darwin":  # macOS
             self.sleep_proc = Popen(["caffeinate"])  # Keeps system awake
         elif os_uname().system == "Linux":  # Linux
@@ -74,13 +73,14 @@ class SleepPrevention:
         else:
             print("⚠️ Sleep prevention not supported on this OS.")
 
-    def close(self):
-        """Ensure background processes terminate when bot stops."""
-        if self.sleep_proc:
-            self.sleep_proc.terminate()  # Kill sleep prevention process
-            print("💤 Sleep prevention disabled.\n")
-
     def _start_commit_thread(self):
         """Start the background commit thread."""
         commit_thread = Thread(target=self._prevent_sleep, daemon=True)
         commit_thread.start()
+
+    def close(self):
+        """Ensure background processes terminate when bot stops."""
+        if self.sleep_proc:
+            self.sleep_proc.terminate()  # Kill sleep prevention process
+            print("💤 Sleep prevention disabled.")
+

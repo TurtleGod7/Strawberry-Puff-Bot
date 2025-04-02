@@ -144,7 +144,7 @@ def pack_rolled_info(frequency_dict: dict):
         return None
     return ";".join([f"{k}_{v}" for k, v in frequency_dict.items()]) or None
 
-@tasks.loop(seconds=1800)
+@tasks.loop(seconds=1800)# Every 30 minutes
 async def update_status():
     """
     This Python function updates the bot's status every 30 minutes with a list of predefined statuses.
