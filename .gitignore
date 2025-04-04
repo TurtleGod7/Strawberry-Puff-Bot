@@ -1,4 +1,4 @@
-.env
-.vscode/settings.json
-.venv
+.* 
 __pycache__
+*.db-shm
+*.db-wal

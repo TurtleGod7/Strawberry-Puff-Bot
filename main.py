@@ -1,6 +1,6 @@
 from os import getenv, path; from os import name as os_name
 from random import choices
-from sqlite3 import connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
+from sqlite3 import Connection, connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
 from math import ceil, floor
 from time import time, mktime
@@ -57,13 +57,18 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True)
 
-# The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
-# lowercase.
+
 class ToLowerConverter(commands.Converter):
+    '''
+    The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
+    lowercase. It also checks that the argument isn't a number (integer) to ensure it is a valid string input.
+    '''
     async def convert(self, ctx, argument):
         if not isinstance(argument, str):
             raise commands.BadArgument("Argument must be a string")
-        return argument.lower()
+        try: int(argument); raise commands.BadArgument("Argument must be a string")
+        except ValueError: return argument.lower()
+        # Another check to ensure it's not an integer
 
 async def dm_ping(user_id: int, message: str):
     """
@@ -241,6 +246,14 @@ def round_int(num: float):
     else:
         return round(num)
 
+def get_db_connection(path: str, check_same_thread: bool = False) -> Connection:
+    '''
+    Returns the connection for a SQLite database, ensuring the correct path format based on the operating system
+    Path must be formatted with forward slashes (/) for input
+    '''
+    db_path = path.replace("/", "\\") if os_name == "nt" else path
+    return connect(db_path, check_same_thread=check_same_thread)
+
 @bot.event
 async def on_ready():
     """
@@ -258,7 +271,7 @@ async def on_ready():
             print(f" - {command.name}")
         print(f"flags.DEBUG: Admin Users: {ADMIN_USERS}")
 
-    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
+    conn = get_db_connection("assets/database/puffs.db", True)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM puffs")
     global puff_list
@@ -283,7 +296,7 @@ async def on_ready():
     cursor.close()
     conn.close()
 
-    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    conn = get_db_connection("assets/database/users.db", True)
     cursor = conn.cursor()
     if flags.TABLE_CREATION:
         cursor.execute("""
@@ -299,13 +312,6 @@ async def on_ready():
             "win"	INTEGER DEFAULT 0,
             "loss"	INTEGER DEFAULT 0,
             "totalBattles"	INTEGER DEFAULT 0,
-        )
-        """)
-
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pity (
-            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "pity" INTEGER NOT NULL DEFAULT 0
         )
         """)
 
@@ -392,143 +398,88 @@ async def roll_a_puff(interaction: discord.Interaction):
     # So Discord doesn't time out the interaction
 
     user_id = interaction.user.id
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT pity FROM pity WHERE username = ?", (user_id,))
-    pityInfo = cursor.fetchone()
-
-    if pityInfo is None:
-        pity = 0
-        cursor.execute("INSERT INTO pity (username) VALUES (?)", (user_id,))
-        conn.commit()
-    else:
-        pity = pityInfo[0]
-
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor() # All data will be retrieved here
+    # Checks Validity of records
+    cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (user_id,))
+    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,))
+    # Selects Pity and Rolled Data
+    cursor.execute("SELECT pity,rolledGolds,rolledNormals FROM stats WHERE username = ?", (user_id,))
+    pity, rolledGolds, rolledNormals = cursor.fetchone()
+    # Gets Settings for Pingongold
+    cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
+    PingonGold = cursor.fetchone()[0]
     cursor.close()
     conn.close()
 
-    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-
     if int(pity) < flags.PITY_LIMIT:
         isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
-        if isRareval < 2:
-            cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
-            data =  cursor.fetchall()
-            items, weights = zip(*data) # Randomly selects a weighted role (id)
-            selected_id = choices(items, weights=weights, k=1)[0]
-            cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-            choice = cursor.fetchone() # Gets the full info from the id
-
-            cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRareval,))
-            total_weight = cursor.fetchone()[0]
-        else:
-            isLimitedval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
-            cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
-            data =  cursor.fetchall()
-            items, weights = zip(*data) # Randomly selects a weighted role (id)
-            selected_id = choices(items, weights=weights, k=1)[0]
-            cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-            choice = cursor.fetchone() # Gets the full info from the id
-
-            cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
-            total_weight = cursor.fetchone()[0]
-
-            isRareval = isLimitedval
-        cursor.close() # Gets info for the chance calculation
-        conn.close()
-    else:
-        isLimitedval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
-        cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isLimitedval,))
-        data =  cursor.fetchall()
-        items, weights = zip(*data) # Randomly selects a weighted role (id)
-        selected_id = choices(items, weights=weights, k=1)[0]
-        cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
-        choice = cursor.fetchone() # Gets the full info from the id
-
-        cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isLimitedval,))
-        total_weight = cursor.fetchone()[0]
-
-        isRareval = isLimitedval+2
-
-        cursor.close()
-        conn.close()
+    else: isRareval = 2  # When pity hits 100, it guarantees a gold or limited roll
+    if isRareval >= 2: # Rolls again
+        isRareval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
+    # Gets data to roll individually
+    cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
+    data =  cursor.fetchall()
+    items, weights = zip(*data) # Randomly selects a weighted role (id)
+    selected_id = choices(items, weights=weights, k=1)[0]
+    # Gets data about the puff itself that was chosen
+    cursor.execute("SELECT name, description, imagepath, weight, isRare FROM puffs WHERE id = ?", (selected_id,))
+    choice = cursor.fetchone() # Gets the full info from the id
+    cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRareval,))
+    total_weight = cursor.fetchone()[0]
+    cursor.close() # Gets info for the chance calculation
+    conn.close()
+    if int(pity) >= flags.PITY_LIMIT: isRareval += 2
 
     name, description, image_path, weights, isRare = choice
     chance ='{:.2%}'.format((weights/total_weight)*weightsMultipier.get(isRareval))
 
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT EXISTS(SELECT 1 FROM stats WHERE username = ?)", (user_id,))
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO stats (username) VALUES (?)", (user_id,))
+    table = unpack_rolled_info(rolledGolds, True) if isRareval >= 2 else unpack_rolled_info(rolledNormals, True)
+    table_name = "rolledGolds" if isRareval >= 2 else "rolledNormals"
+    ascension = table.get(name, -1)
+    if ascension < flags.ASCENSION_MAX:
+        table[name] = ascension+1
+    table = dict(sorted(table.items()))
 
-    cursor.execute("SELECT rolledGolds,rolledNormals FROM stats WHERE username = ?", (user_id,))
-    rolledGolds, rolledNormals = cursor.fetchone()
-    frequencyGold = unpack_rolled_info(rolledGolds, True)
-    frequencyNormal = unpack_rolled_info(rolledNormals, True)
-
-    if isRare >= 2:
-        ascension = frequencyGold.get(name, -1)
-        if ascension < flags.ASCENSION_MAX:
-            frequencyGold[name] = ascension+1
-        frequencyGold = dict(sorted(frequencyGold.items()))
-    else:
-        ascension = frequencyNormal.get(name, -1)
-        if ascension < flags.ASCENSION_MAX:
-            frequencyNormal[name] = ascension+1
-        frequencyNormal = dict(sorted(frequencyNormal.items()))
-
-    cursor.execute("UPDATE stats SET rolls = rolls + 1 WHERE username = ?", (user_id,))
-    cursor.execute("UPDATE pity SET pity = pity + 1 WHERE username = ?", (user_id,))
-
+    cursor.execute("UPDATE stats SET rolls = rolls + 1, pity = pity + 1, " + table_name + " = ? WHERE username = ?", (pack_rolled_info(table), user_id,))
     if int(isRare) >= 2:
-        cursor.execute("UPDATE pity SET pity = 0 WHERE username = ?", (user_id,))
-        if int(isRare) > 2:
-            cursor.execute("UPDATE stats SET limited = limited + 1 WHERE username = ?", (user_id,))
-        else:
-            cursor.execute("UPDATE stats SET gold = gold + 1 WHERE username = ?", (user_id,))
+        stat_column = "limited" if isRare > 2 else "gold"
         cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
         avgPity = cursor.fetchone()[0]
-        if avgPity == 0:
-            cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (pity, user_id))
-        else:
-            cursor.execute("UPDATE stats SET avgPity = ? WHERE username = ?", (mean([avgPity,pity]), user_id))
+        cursor.execute(
+            f"UPDATE stats SET avgPity = ?, {stat_column} = {stat_column} + 1, pity = 0 WHERE username = ?",
+            (pity if avgPity == 0 else mean([avgPity,pity]), user_id)
+        )
     elif int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
-
-    cursor.execute("UPDATE stats SET rolledGolds = ?, rolledNormals = ? WHERE username = ?", (pack_rolled_info(frequencyGold), pack_rolled_info(frequencyNormal), user_id))
-    cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (user_id,))
-    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,))
-    cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
-    PingonGold = cursor.fetchone()[0]
 
     conn.commit()
     cursor.close()
     conn.close()
 
-    numsuffix = {
-        1 : "st",
-        2 : "nd"
-    }
+    numsuffix = {1 : "st", 2 : "nd"}
     image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
-        ascension_text = "is your first time getting this puff!" if frequencyGold[name] == 0 else f"is your **{frequencyGold[name]}**{numsuffix.get(frequencyGold[name], 'th')} ascension"
-        embed.add_field(
-            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
-        )
+        ascension_text = "is your first time getting this puff!" if table[name] == 0 else f"is your **{table[name]}**{numsuffix.get(table[name], 'th')} ascension"
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
         if PingonGold is not None and PingonGold == 1:
-            await dm_ping(user_id,"you rolled a gold rarity puff! :yellow_square:\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n" if isRare == 2 else "you rolled a limited rarity puff! <:gray_square:1342727158673707018>\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
+            rarity_text_name = "gold" if isRare == 2 else "limited"
+            emoji_text = ":yellow_square:" if isRare == 2 else "<:gray_square:1342727158673707018>"
+            await dm_ping(user_id,f"you rolled a {rarity_text_name} rarity puff! {emoji_text}\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
     else:
-        embed.add_field(
-            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\n"
-        )
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\n"
+
+    embed.add_field(
+            name=":strawberry::turtle:" * 4 + ":strawberry:",
+            value=full_text
+    )
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
 
@@ -547,9 +498,9 @@ async def get_pity(interaction: discord.Interaction):
     it is used to retrieve the user's ID to fetch
     :type interaction: discord.Interaction
     """
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT pity FROM pity WHERE username = ?", (interaction.user.id,))
+    cursor.execute("SELECT pity FROM stats WHERE username = ?", (interaction.user.id,))
     pity = cursor.fetchone()[0]
     cursor.close()
     conn.close()
@@ -570,7 +521,7 @@ async def statistics(interaction: discord.Interaction):
     command, the context in which the command was triggered, and allows the bot to respond to the user
     :type interaction: discord.Interaction
     """
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
     user_id = interaction.user.id
 
@@ -612,9 +563,11 @@ async def statistics(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# This class `DropRatesView` in Python implements a view for displaying drop rates of items with
-# pagination controls in a Discord bot.
 class DropRatesView(discord.ui.View):
+    '''
+    This class `DropRatesView` in Python implements a view for displaying drop rates of items with
+    pagination controls in a Discord bot.
+    '''
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
         super().__init__(timeout=flags.BUTTON_PAGE_EXPIRY)
         self.items = items
@@ -670,8 +623,7 @@ async def drop_rates(interaction: discord.Interaction):
     the command invoked, and other relevant details
     :type interaction: discord.Interaction
     """
-    db_path = "assets\\database\\puffs.db" if os_name == "nt" else "assets/database/puffs.db"
-    conn = connect(db_path, check_same_thread=False)
+    conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = 0")
@@ -835,9 +787,11 @@ async def information(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# The `SettingsView` class in Python represents a view for selecting and updating user settings with
-# options to notify about bot startup and Gold/Limited Rarity puff rolls.
 class SettingsView(discord.ui.View):
+    '''
+    The `SettingsView` class in Python represents a view for selecting and updating user settings with
+    options to notify about bot startup and Gold/Limited Rarity puff rolls.
+    '''
     def __init__(self, user_id):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)  # View expires after 60 seconds
         self.user_id = user_id
@@ -852,8 +806,7 @@ class SettingsView(discord.ui.View):
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         value = int(select.values[0])
 
-        db_path = "assets\\database\\users.db" if os_name == "nt" else "assets/database/users.db"
-        conn = connect(db_path, check_same_thread=False)
+        conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
         settingsDict = {
             0: "DMonStartup",
@@ -962,7 +915,7 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     client_user_id = interaction.user.id
     target_user_id = user.id
 
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity FROM stats WHERE username = ?", (client_user_id,))
@@ -1064,8 +1017,10 @@ async def skater(ctx, *, arg):
     """
     await ctx.send(arg + " <:skater:1345246453911781437>")
 
-# This class defines buttons for rearranging a lineup and selecting new puffs in a Discord UI.
 class LineupSetupButtons(discord.ui.View):
+    '''
+    This class defines buttons for rearranging a lineup and selecting new puffs in a Discord UI.
+    '''
     def __init__(self):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
 
@@ -1081,9 +1036,11 @@ class LineupSetupButtons(discord.ui.View):
         await interaction.response.edit_message(view=PuffDropdown(user_puffs))
         # Trigger dropdown function
 
-# The `PuffDropdown` class creates a dropdown menu for selecting puffs, with options based on a
-# provided list, and handles the callback to save the selected puffs to a database.
 class PuffDropdown(discord.ui.View):
+    '''
+    The `PuffDropdown` class creates a dropdown menu for selecting puffs, with options based on a
+    provided list, and handles the callback to save the selected puffs to a database.
+    '''
     def __init__(self, puff_list: dict):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.puff_list = puff_list
@@ -1120,9 +1077,11 @@ class PuffDropdown(discord.ui.View):
         battlefunctions.save_lineup(selected_puffs, interaction.user.id)
         # Save the new lineup to the database
 
-# The `RearrangeDropdown` class in Python creates a Discord UI dropdown for rearranging items in a
-# lineup with interactive callbacks for selecting and moving items.
 class RearrangeDropdown(discord.ui.View):
+    '''
+    The `RearrangeDropdown` class in Python creates a Discord UI dropdown for rearranging items in a
+    lineup with interactive callbacks for selecting and moving items.
+    '''
     def __init__(self, lineup: list):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.lineup = lineup
@@ -1208,6 +1167,9 @@ async def setup_lineup(interaction: discord.Interaction):
     # Handle dropdown for selecting new puffs
 
 class BattleConfirmView(discord.ui.View):
+    '''
+    A view for confirming a battle challenge between two users in a Discord bot, with buttons to accept or decline the challenge.
+    '''
     def __init__(self, challenger, opponent):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.challenger = challenger
@@ -1269,7 +1231,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     opponent_id = opponent.id
     global COOLDOWN_TIME # Do not set any values = to this
 
-    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
     cursor.execute(f"SELECT EXISTS(SELECT 1 FROM pvp_lineup WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0:
@@ -1344,17 +1306,16 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     elif overall_score == 0:
         winner = ""
 
-    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
-    cursor.execute("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", (user_id,))
-    cursor.execute("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", (opponent_id,))
+    cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(user_id,), (opponent_id,)])
     if overall_score > 0:
         cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (user_id,))
         cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (opponent_id,))
     elif overall_score < 0:
         cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (opponent_id,))
-        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (opponent_id,))
+        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (user_id,))
 
     conn.commit()
     cursor.close()
@@ -1449,7 +1410,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     :type puff: str
     """
     puff = " ".join(puff.split("_"))
-    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
+    conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
     cursor.execute("SELECT description, imagepath, isRare, stats FROM puffs WHERE name = ?", (puff,))
     puff_data = cursor.fetchone()
@@ -1490,7 +1451,7 @@ async def get(ctx, *, arg: ToLowerConverter):
         return
 
     file = str(arg) + ".png"
-    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
     cursor.execute("SELECT name, description, isRare FROM puffs WHERE imagepath = ?", (file,))
     name, description, isRare = cursor.fetchone()
@@ -1508,15 +1469,14 @@ async def get(ctx, *, arg: ToLowerConverter):
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
-        embed.add_field(
-            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis is your Noneth ascension"
-        )
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis is your Noneth ascension"
     else:
-        embed.add_field(
-            name=":strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry::turtle::strawberry:",
-            value=f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
-        )
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}%** chance to roll this puff!\n"
+
+    embed.add_field(
+        name=":strawberry::turtle:" * 4 +":strawberry:",
+        value=full_text
+    )
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
 
@@ -1558,7 +1518,7 @@ async def statsof(ctx, arg: discord.User):
     specified user from the database and display them in an embedded message
     :type arg: discord.User
     """
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
     user_id = arg.id
@@ -1619,7 +1579,7 @@ async def createacct(ctx, table, arg: discord.User):
     :type arg: discord.User
     """
     user_id = arg.id
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
     cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 0:
@@ -1650,7 +1610,7 @@ async def deleteacct(ctx, table, arg: discord.User):
     :type arg: discord.User
     """
     user_id = arg.id
-    conn = connect("assets\\database\\users.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/users.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
     cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 1:
@@ -1676,7 +1636,7 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     :type arg: ToLowerConverter
     """
     file = str(arg) + ".png"
-    conn = connect("assets\\database\\puffs.db", check_same_thread=False) if os_name == "nt" else connect("assets/database/puffs.db", check_same_thread=False)
+    conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
     cursor.execute("SELECT name, description, isRare, stats FROM puffs WHERE imagepath = ?", (file,))
     name, description, isRare, stats = cursor.fetchone()
@@ -1770,6 +1730,21 @@ async def unban(ctx, arg:discord.User):
         flags.BANNED_HANDLER.add_data([(arg.id, time() - 1)])
     else:
         await ctx.send(f"{arg.display_name} is not banned or the ban has expired")
+
+@bot.command()
+@is_authorised_user()
+async def getmaxpity(ctx):
+    '''
+    gets the maximum pity limit for the bot and sets it to the user's pity value in the database
+    '''
+    user_id = ctx.author.id
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE stats SET pity = " + str(flags.PITY_LIMIT) + " WHERE username = ?", (user_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    await ctx.send(f"Pity for {ctx.author.display_name} has been set to the maximum limit of {flags.PITY_LIMIT}.")
 
 @bot.command()
 @is_authorised_user()
