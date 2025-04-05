@@ -83,27 +83,27 @@ Please ensure your Python version is 3.6.X and greater[^1]. The code will not ru
 ## Project Structure
 
 The repository is organized as follows:
-
-    ```bash
-    Strawberry-Puff-Bot/
-    ├── assets/
-    │   ├── database/
-    │   │   ├── puffs.db # DB for puffs
-    │   │   └── users.db # DB for user data
-    │   ├── profile/ # Where banners are stored
-    │   └── puffs/ # Where puff .pngs are stored
-    ├── src/
-    │   ├── main.py # Main script
-    │   └── helpers/
-    │       ├── battlefunctions.py # Functions for pvp
-    │       ├── daemons.py # Daemons
-    │       ├── errorclasses.py # Classes for errors
-    │       └── flags.py # Flags used in main script
-    ├── .env.example # Used for secrets (You need to make your own)
-    ├── requirements.txt
-    ├── README.md
-    └── LICENSE
-    ```
+    
+```bash
+Strawberry-Puff-Bot/
+├── assets/
+│   ├── database/
+│   │   ├── puffs.db # DB for puffs
+│   │   └── users.db # DB for user data
+│   ├── profile/ # Where banners are stored
+│   └── puffs/ # Where puff .pngs are stored
+├── src/
+│   ├── main.py # Main script
+│   └── helpers/
+│       ├── battlefunctions.py # Functions for pvp
+│       ├── daemons.py # Daemons
+│       ├── errorclasses.py # Classes for errors
+│       └── flags.py # Flags used in main script
+├── .env.example # Used for secrets (You need to make your own)
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
 
 ## Contributing
 
