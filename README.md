@@ -4,7 +4,7 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 
 ## Current Banner
 
-![Latest Banner](assets/profile/banner_angel.gif)
+![Latest Banner](assets/profile/banner_demon.gif)
 
 ## Features
 
@@ -80,9 +80,34 @@ Please ensure your Python version is 3.6.X and greater[^1]. The code will not ru
     python main.py
     ```
 
+## Project Structure
+
+The repository is organized as follows:
+
+    ```bash
+    Strawberry-Puff-Bot/
+    ├── assets/
+    │   ├── database/
+    │   │   ├── puffs.db # DB for puffs
+    │   │   └── users.db # DB for user data
+    │   ├── profile/ # Where banners are stored
+    │   └── puffs/ # Where puff .pngs are stored
+    ├── src/
+    │   ├── main.py # Main script
+    │   └── helpers/
+    │       ├── battlefunctions.py # Functions for pvp
+    │       ├── daemons.py # Daemons
+    │       ├── errorclasses.py # Classes for errors
+    │       └── flags.py # Flags used in main script
+    ├── .env.example # Used for secrets (You need to make your own)
+    ├── requirements.txt
+    ├── README.md
+    └── LICENSE
+    ```
+
 ## Contributing
 
-Contributions are welcome! Please fork the repository and create a pull request with your changes. I'm also working on a website and a PvP function for the bot and I would love for some support on that.
+Contributions are welcome! Please fork the repository and create a pull request with your changes. I'm also working on a website for the bot and I would love for some support on that.
 
 ## License
 

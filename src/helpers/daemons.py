@@ -84,3 +84,40 @@ class SleepPrevention:
             self.sleep_proc.terminate()  # Kill sleep prevention process
             print("💤 Sleep prevention disabled.")
 
+class PuffRetriever:
+    def __init__(self, global_var, db_name="puffs.db", interval=10):
+        """Initialize the database connection and start the background commit thread."""
+        db_path = "assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name
+        self.conn = connect(db_path, check_same_thread=False)
+        self.cursor = self.conn.cursor()
+        self.interval = interval
+        self.data_lock = Lock()
+        self.global_var = global_var
+
+        # Start periodic saving
+        self._start_commit_thread()
+
+    def retrieve_data(self):
+        """Commit queued data to the database."""
+        with self.data_lock:
+            if self.global_var:
+                keys = [vals for vals in self.global_var[0]]
+                # Create a string of question marks, separated by commas
+                placeholders = ', '.join(['?'] * len(keys))
+
+                # Now, build your SQL query using this string of placeholders
+                sql_query = f"SELECT * FROM puffs WHERE id NOT IN ({placeholders})"
+                self.cursor.execute(sql_query, keys)
+                self.global_var.extend(self.cursor.fetchall())  # Fetch all new puffs
+                print("Data retrieved to DB")
+
+    def _periodic_commit(self):
+        """Background task that commits data every interval."""
+        while True:
+            sleep(self.interval)
+            self.retrieve_data()
+
+    def _start_commit_thread(self):
+        """Start the background commit thread."""
+        commit_thread = Thread(target=self._periodic_commit, daemon=True)
+        commit_thread.start()

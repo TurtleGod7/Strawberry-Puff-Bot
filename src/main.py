@@ -10,31 +10,32 @@ import discord
 from discord.ext import commands
 from discord.ext import tasks
 from dotenv import load_dotenv
-import battlefunctions
-import flags
-import errorclasses
-from daemons import SleepPrevention
+import helpers
+import helpers.battlefunctions
+import helpers.daemons
+import helpers.errorclasses
+import helpers.flags
 
-SleepPrevention()
+helpers.daemons.SleepPrevention()
 load_dotenv()
 
 TOKEN = getenv("DISCORD_TOKEN")
 ADMIN_USERS = set(map(int,getenv("ADMIN_USERS", "").split(",")))
 
 ### Errors
-NotAdmin = errorclasses.NotAdminError
-BannedPlayer = errorclasses.BannedPlayerError
-BannedPlayerCtx = errorclasses.BannedPlayerErrorCtx
+NotAdmin = helpers.errorclasses.NotAdminError
+BannedPlayer = helpers.errorclasses.BannedPlayerError
+BannedPlayerCtx = helpers.errorclasses.BannedPlayerErrorCtx
 ###
 
 ### Global Variables that DON'T need to be changed
 weightsMultipier = {
-    0 : flags.RARITY_WEIGHTS[0],
-    1 : flags.RARITY_WEIGHTS[1],
-    2 : flags.RARITY_WEIGHTS[2]*flags.LIMITED_WEIGHTS[0],
-    3 : flags.RARITY_WEIGHTS[2]*flags.LIMITED_WEIGHTS[1],
-    4 : flags.LIMITED_WEIGHTS[0], # When pity hits 100
-    5 : flags.LIMITED_WEIGHTS[1],
+    0 : helpers.flags.RARITY_WEIGHTS[0],
+    1 : helpers.flags.RARITY_WEIGHTS[1],
+    2 : helpers.flags.RARITY_WEIGHTS[2]*helpers.flags.LIMITED_WEIGHTS[0],
+    3 : helpers.flags.RARITY_WEIGHTS[2]*helpers.flags.LIMITED_WEIGHTS[1],
+    4 : helpers.flags.LIMITED_WEIGHTS[0], # When pity hits 100
+    5 : helpers.flags.LIMITED_WEIGHTS[1],
 }
 weightedColor = {
     -1: discord.Color.brand_red(),
@@ -48,7 +49,7 @@ rareColors = {
         3 : discord.Color.greyple()
     }
 activity_task_running = False
-puff_list = []
+puff_list = []#; daemons.PuffRetriever(global_var=puff_list)
 banned_users = {}
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
@@ -57,7 +58,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True)
 
-
+if helpers.flags.DEBUG:
+    print(f"Values in puff_list: {puff_list}")
 class ToLowerConverter(commands.Converter):
     '''
     The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
@@ -157,8 +159,8 @@ async def update_status():
     global activity_task_running
     activity_task_running = True
 
-    current_status = flags.STATUSES.pop(0)
-    flags.STATUSES.append(current_status)
+    current_status = helpers.flags.STATUSES.pop(0)
+    helpers.flags.STATUSES.append(current_status)
     await bot.change_presence(activity=current_status)
 
     activity_task_running = False
@@ -236,7 +238,7 @@ def round_int(num: float):
         return int(num)
     checker = numberString[point+1]
     sign = True if num <= 0 else False
-    if flags.DEBUG:
+    if helpers.flags.DEBUG:
         print(f"number string: {numberString}\npoint index: {point}\nchecker: {checker}")
     if int(checker) == 5:
         if sign:
@@ -254,31 +256,52 @@ def get_db_connection(path: str, check_same_thread: bool = False) -> Connection:
     db_path = path.replace("/", "\\") if os_name == "nt" else path
     return connect(db_path, check_same_thread=check_same_thread)
 
+def split_on_newlines(text, max_length=1000):
+    result = []
+    start = 0
+    while start < len(text):
+        end = start + max_length
+        # If the string is shorter than max_length
+        if end >= len(text):
+            result.append(text[start:])
+            break
+        
+        # Try to find the last newline before the max length
+        newline_pos = text.rfind('\n', start, end)
+        if newline_pos != -1:
+            result.append(text[start:newline_pos + 1])  # Include the newline
+            start = newline_pos + 1
+        else:
+            result.append(text[start:end])
+            start = end
+
+    return result
+
 @bot.event
 async def on_ready():
     """
-    The function sets up database tables, checks for flags.DEBUG mode, updates bot status, and sends direct
+    The function sets up database tables, checks for helpers.flags.DEBUG mode, updates bot status, and sends direct
     messages to users based on settings.
     """
     await bot.tree.sync()
     if update_status.is_running() is False:
         update_status.start()
 
-    if flags.DEBUG:
+    if helpers.flags.DEBUG:
         print(f"Discord version: {discord.__version__}")
         print("Registered commands:")
         for command in bot.tree.get_commands():
             print(f" - {command.name}")
-        print(f"flags.DEBUG: Admin Users: {ADMIN_USERS}")
+        print(f"helpers.flags.DEBUG: Admin Users: {ADMIN_USERS}")
 
     conn = get_db_connection("assets/database/puffs.db", True)
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM puffs")
     global puff_list
     puff_list = flatten_list(cursor.fetchall())
-    if flags.DEBUG:
+    if helpers.flags.DEBUG:
         print(f"List of puffs: {puff_list}")
-    if flags.TABLE_CREATION:
+    if helpers.flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS puffs (
             "id" INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
@@ -298,7 +321,7 @@ async def on_ready():
 
     conn = get_db_connection("assets/database/users.db", True)
     cursor = conn.cursor()
-    if flags.TABLE_CREATION:
+    if helpers.flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stats (
             "username"	INTEGER PRIMARY KEY NOT NULL UNIQUE,
@@ -347,7 +370,7 @@ async def on_ready():
 
         conn.commit()
     PeopletoDM = []
-    if not flags.STOP_PING_ON_STARTUP:
+    if not helpers.flags.STOP_PING_ON_STARTUP:
         cursor.execute("SELECT username FROM settings WHERE DMonStartup = 1")
         PeopletoDM = cursor.fetchall()
     global banned_users
@@ -358,21 +381,21 @@ async def on_ready():
     conn.close()
     for k in PeopletoDM:
         await dm_ping(k[0],"you have set your settings to ping you when I go online\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.")
-    if flags.CHANGE_PROFILE:
-        if not path.exists(flags.AVATAR_PATH):
+    if helpers.flags.CHANGE_PROFILE:
+        if not path.exists(helpers.flags.AVATAR_PATH):
             print("avatar .gif isn't found")
         else:
-            with open(flags.AVATAR_PATH, "rb") as f:
+            with open(helpers.flags.AVATAR_PATH, "rb") as f:
                 avatar_img = f.read()
                 try:
                     await bot.user.edit(avatar=avatar_img) # type: ignore
                 except Exception as e:
                     print(f'{e}')
 
-        if not path.exists(f"assets\\profile\\{flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{flags.BANNER_FILE}"):
+        if not path.exists(f"assets\\profile\\{helpers.flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{helpers.flags.BANNER_FILE}"):
             print("banner .gif isn't found")
         else:
-            with open(f"assets\\profile\\{flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{flags.BANNER_FILE}", "rb") as f:
+            with open(f"assets\\profile\\{helpers.flags.BANNER_FILE}" if os_name == "nt" else f"assets/profile/{helpers.flags.BANNER_FILE}", "rb") as f:
                 banner_img = f.read()
                 try:
                     await bot.user.edit(banner=banner_img) # type: ignore
@@ -414,11 +437,11 @@ async def roll_a_puff(interaction: discord.Interaction):
 
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-    if int(pity) < flags.PITY_LIMIT:
-        isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
+    if int(pity) < helpers.flags.PITY_LIMIT:
+        isRareval = choices([0,1,2], weights=helpers.flags.RARITY_WEIGHTS, k=1)[0]
     else: isRareval = 2  # When pity hits 100, it guarantees a gold or limited roll
     if isRareval >= 2: # Rolls again
-        isRareval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
+        isRareval = choices([2,3], weights=helpers.flags.LIMITED_WEIGHTS, k=1)[0]
     # Gets data to roll individually
     cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
     data =  cursor.fetchall()
@@ -431,7 +454,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     total_weight = cursor.fetchone()[0]
     cursor.close() # Gets info for the chance calculation
     conn.close()
-    if int(pity) >= flags.PITY_LIMIT: isRareval += 2
+    if int(pity) >= helpers.flags.PITY_LIMIT: isRareval += 2
 
     name, description, image_path, weights, isRare = choice
     chance ='{:.2%}'.format((weights/total_weight)*weightsMultipier.get(isRareval))
@@ -442,7 +465,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     table = unpack_rolled_info(rolledGolds, True) if isRareval >= 2 else unpack_rolled_info(rolledNormals, True)
     table_name = "rolledGolds" if isRareval >= 2 else "rolledNormals"
     ascension = table.get(name, -1)
-    if ascension < flags.ASCENSION_MAX:
+    if ascension < helpers.flags.ASCENSION_MAX:
         table[name] = ascension+1
     table = dict(sorted(table.items()))
 
@@ -463,7 +486,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn.close()
 
     numsuffix = {1 : "st", 2 : "nd"}
-    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -569,14 +592,14 @@ class DropRatesView(discord.ui.View):
     pagination controls in a Discord bot.
     '''
     def __init__(self, items, total_weight0, total_weight1, total_weight2, total_weight3):
-        super().__init__(timeout=flags.BUTTON_PAGE_EXPIRY)
+        super().__init__(timeout=helpers.flags.BUTTON_PAGE_EXPIRY)
         self.items = items
         self.total_weight0 = total_weight0
         self.total_weight1 = total_weight1
         self.total_weight2 = total_weight2
         self.total_weight3 = total_weight3
         self.page = 0
-        self.items_per_page = flags.ITEMS_PER_PAGE
+        self.items_per_page = helpers.flags.ITEMS_PER_PAGE
 
     def generate_embed(self):
         isRaretoWeight = {0:self.total_weight0, 1:self.total_weight1, 2:self.total_weight2, 3:self.total_weight3,}
@@ -760,17 +783,17 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Gacha system",
-        value=f"This system works by initially rolling for the rarity at weights of **{flags.RARITY_WEIGHTS[2]*100}**%, **{flags.RARITY_WEIGHTS[1]*100}**%, and **{flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. Then if you roll in the {flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
+        value=f"This system works by initially rolling for the rarity at weights of **{helpers.flags.RARITY_WEIGHTS[2]*100}**%, **{helpers.flags.RARITY_WEIGHTS[1]*100}**%, and **{helpers.flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. Then if you roll in the {helpers.flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited which is at **{helpers.flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puffs individual weights will apply.",
         inline=False
     )
     embed.add_field(
         name="Pity system",
-        value=f"When you reach **{flags.PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function.",
+        value=f"When you reach **{helpers.flags.PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff (check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs have a higher chance of being selected compared to the less common ones.\n-# By the way, your pity is only showed when you roll a gold/limited rarity puff, it is not public in the `/statistics` function.",
         inline=False
     )
     embed.add_field(
         name="Ascensions",
-        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{flags.ASCENSION_MAX}** ascension. These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended.",
+        value=f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{helpers.flags.ASCENSION_MAX}** ascension. These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended.",
         inline=False
     )
     embed.add_field(
@@ -780,7 +803,12 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Battle calculations",
-        value="The battling continues for every puff until someone's lineup ends (This **doesn't** give the other side the win). It works by each removing the other puff's health and checking for a draw, then if the challenger won, then if the opponent won. The average number of wins is used to calculate the wins and losses. The color logic from the comparison function is also implemented here.",
+        value="The battling continues for every puff until someone's lineup ends (This **doesn't** give the other side the win). It works by each removing the other puff's health from the attack and checking for a draw, then if the challenger won, then if the opponent won. The average number of wins is used to calculate the wins and losses. The color logic from the comparison function is also implemented here.",
+        inline=False
+    )
+    embed.add_field(
+        name="Battle statistics",
+        value="Attack: This is the amount of damage a puff can deal to the opponent's puff.\nHealth: This is the amount of damage a puff can take before it faints\nCrit Chance: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\nCrit Damage: This is the amount of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n\nThese stats are important for determining how well your puffs perform in battles against other players.",
         inline=False
     )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
@@ -793,14 +821,15 @@ class SettingsView(discord.ui.View):
     options to notify about bot startup and Gold/Limited Rarity puff rolls.
     '''
     def __init__(self, user_id):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)  # View expires after 60 seconds
+        super().__init__(timeout=helpers.flags.SETTINGS_EXPIRY)  # View expires after 60 seconds
         self.user_id = user_id
 
     @discord.ui.select(
         placeholder="Choose a setting...",
         options=[
             discord.SelectOption(label="Notify you when the bot turns on", value="0", description="Enable or disable bot startup notifications."),
-            discord.SelectOption(label="Notify you when you roll a Gold/Limited Rarity puff", value="1", description="Extremely useful when spamming")
+            discord.SelectOption(label="Notify you when you roll a Gold/Limited Rarity puff", value="1", description="Extremely useful when spamming"),
+            discord.SelectOption(label="Shorten long texts", value="2", description="Enable or disable text shortening for long descriptions")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -811,6 +840,7 @@ class SettingsView(discord.ui.View):
         settingsDict = {
             0: "DMonStartup",
             1: "PingonGold",
+            2: "ShortenText"
         }
         cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (self.user_id,))
         if cursor.fetchone()[0] == 0:
@@ -862,13 +892,13 @@ async def showBanner(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     now  = int(time())
-    start_time = int(mktime(datetime.strptime(flags.BANNER_START, "%m/%d/%Y").timetuple()))
-    end_time = int(mktime(datetime.strptime(flags.BANNER_END, "%m/%d/%Y").timetuple()))
+    start_time = int(mktime(datetime.strptime(helpers.flags.BANNER_START, "%m/%d/%Y").timetuple()))
+    end_time = int(mktime(datetime.strptime(helpers.flags.BANNER_END, "%m/%d/%Y").timetuple()))
     delta_time = end_time - now
     delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
 
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-    embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/profile/{flags.BANNER_FILE}?=raw")
+    embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/profile/{helpers.flags.BANNER_FILE}?=raw")
     embed.add_field(name="Banner Dates", value=f"Start: <t:{start_time}:F>\nEnd: <t:{end_time}:F>\nTime till end: {delta_time}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -999,7 +1029,7 @@ async def github(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     embed = discord.Embed(title="Github", color=discord.Color.random())
-    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}")
+    embed.add_field(name="Repository link for this instance of the bot",value=f"https://github.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.command()
@@ -1022,17 +1052,17 @@ class LineupSetupButtons(discord.ui.View):
     This class defines buttons for rearranging a lineup and selecting new puffs in a Discord UI.
     '''
     def __init__(self):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        super().__init__(timeout=helpers.flags.SETTINGS_EXPIRY)
 
     @discord.ui.button(label="🛠️ Rearrange Lineup", style=discord.ButtonStyle.primary)
     async def rearrange_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_lineups = battlefunctions.get_lineup(interaction.user.id)
+        user_lineups = helpers.battlefunctions.get_lineup(interaction.user.id)
         await interaction.response.edit_message(view=RearrangeDropdown(user_lineups))
         # Trigger rearrange function
 
     @discord.ui.button(label="✨ Pick New Puffs", style=discord.ButtonStyle.success)
     async def select_puffs_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user_puffs = battlefunctions.get_owned(interaction.user.id)
+        user_puffs = helpers.battlefunctions.get_owned(interaction.user.id)
         await interaction.response.edit_message(view=PuffDropdown(user_puffs))
         # Trigger dropdown function
 
@@ -1042,7 +1072,7 @@ class PuffDropdown(discord.ui.View):
     provided list, and handles the callback to save the selected puffs to a database.
     '''
     def __init__(self, puff_list: dict):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        super().__init__(timeout=helpers.flags.SETTINGS_EXPIRY)
         self.puff_list = puff_list
 
         # Create dropdown directly in the View
@@ -1074,7 +1104,7 @@ class PuffDropdown(discord.ui.View):
 
         selected_puffs = self.select.values
         await interaction.response.send_message(f"✅ Selected Puffs: {', '.join(selected_puffs)}", ephemeral=True)
-        battlefunctions.save_lineup(selected_puffs, interaction.user.id)
+        helpers.battlefunctions.save_lineup(selected_puffs, interaction.user.id)
         # Save the new lineup to the database
 
 class RearrangeDropdown(discord.ui.View):
@@ -1083,7 +1113,7 @@ class RearrangeDropdown(discord.ui.View):
     lineup with interactive callbacks for selecting and moving items.
     '''
     def __init__(self, lineup: list):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        super().__init__(timeout=helpers.flags.SETTINGS_EXPIRY)
         self.lineup = lineup
 
         # Ensure lineup has at least 1 puff, otherwise disable the dropdown
@@ -1171,7 +1201,7 @@ class BattleConfirmView(discord.ui.View):
     A view for confirming a battle challenge between two users in a Discord bot, with buttons to accept or decline the challenge.
     '''
     def __init__(self, challenger, opponent):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        super().__init__(timeout=helpers.flags.SETTINGS_EXPIRY)
         self.challenger = challenger
         self.opponent = opponent
         self.result = None
@@ -1204,7 +1234,6 @@ class BattleConfirmView(discord.ui.View):
         """Handles timeout properly and stops the view."""
         if self.result is None:
             self.stop()
-
 
 @bot.tree.command(name="battle", description="Battle another user!")
 @discord.app_commands.check(is_banned_user)
@@ -1245,8 +1274,8 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
 
     if result:
         last_used = result[0]
-        if current_time - last_used < flags.COOLDOWN_TIME:
-            remaining_time = flags.COOLDOWN_TIME - (current_time - last_used)
+        if current_time - last_used < helpers.flags.COOLDOWN_TIME:
+            remaining_time = helpers.flags.COOLDOWN_TIME - (current_time - last_used)
             await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             conn.close()
             return
@@ -1257,8 +1286,8 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
         return
 
     # Finally checks if who they are battling doesn't have a saved lineup
-    user_lineup = battlefunctions.get_lineup(user_id)
-    opponent_lineup = battlefunctions.get_lineup(opponent_id)
+    user_lineup = helpers.battlefunctions.get_lineup(user_id)
+    opponent_lineup = helpers.battlefunctions.get_lineup(opponent_id)
     if not user_lineup or not opponent_lineup:
         await interaction.response.send_message(content="⚔️ Both users need a saved lineup!", ephemeral=True)
         return
@@ -1289,15 +1318,18 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     conn.close()
 
     # Convert names to Puff objects
-    user_puffs = battlefunctions.get_puffs_for_battle(user_lineup, user_id)
-    opponent_puffs = battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id)
+    user_puffs = helpers.battlefunctions.get_puffs_for_battle(user_lineup, user_id)
+    opponent_puffs = helpers.battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id)
 
     results = []
     scores = []
     for u_puff, o_puff in zip(user_puffs, opponent_puffs):
-        result_battle, score = battlefunctions.battle(u_puff, o_puff)
-        results.append(result_battle)
-        scores.append(score)
+        try:
+            result_battle, score = helpers.battlefunctions.battle(u_puff, o_puff)
+            results.append(result_battle)
+            scores.append(score)
+        except AttributeError:
+            results.append("The program broke here, please notify the developer"); scores.append(0)
     overall_score = round_int(mean(scores))
     color = weightedColor.get(overall_score)
     winner = interaction.user.display_name
@@ -1329,6 +1361,53 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.followup.send(embed=embed)
 
+class LineupView(discord.ui.View):
+    '''
+    This class `LineupView` in Python implements a view for displaying user lineups with
+    pagination controls in a Discord bot.
+    '''
+    def __init__(self, user_id, display_name, ShortenText):
+        super().__init__(timeout=helpers.flags.BUTTON_PAGE_EXPIRY)
+        self.ShortenText = ShortenText
+        self.user_id = user_id
+        self.display_name = display_name
+        self.owned_puffs = helpers.battlefunctions.get_owned(self.user_id)
+        self.puff_names = list(self.owned_puffs.keys())
+        self.puff_stats = helpers.battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id)
+        self.lineup_puffs = helpers.battlefunctions.get_lineup(self.user_id)
+        self.page = 0
+        ownedPuffsmessage = ""
+        for puff in self.puff_stats:
+            message = f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}%\n"
+            if self.ShortenText:
+                # Shorten long descriptions if enabled
+                message = helpers.battlefunctions.shorten_message(message)
+            ownedPuffsmessage += message
+        self.items = split_on_newlines(ownedPuffsmessage)
+
+    def generate_embed(self):
+        embed = discord.Embed(title=f"{self.display_name} lineup", color=discord.Color.blue())
+        page_items = self.items[self.page]
+
+        embed.add_field(name="Owned Puffs", value=page_items)
+        embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(self.lineup_puffs)))
+        embed.set_footer(text=f"Requested by {self.display_name}")
+        #await interaction.response.send_message(embed=embed, ephemeral=not self.visible)
+        embed.set_footer(text=f"Page {self.page + 1} / {len(self.items)}")
+        return embed
+
+    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="➡️ Next", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page + 1 < len(self.items):
+            self.page += 1
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
 @bot.tree.command(name="lineup", description="Show your lineup")
 @discord.app_commands.check(is_banned_user)
 async def get_lineup(interaction: discord.Interaction, visible: bool=False):
@@ -1348,16 +1427,18 @@ async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     :type visible: bool (optional)
     """
     user_id = interaction.user.id
-    owned_puffs = battlefunctions.get_owned(user_id)
-    puff_names = list(owned_puffs.keys())
-    puff_stats = battlefunctions.get_puffs_for_battle(puff_names, user_id)
-    lineup_puffs = battlefunctions.get_lineup(user_id)
-    ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
-    embed = discord.Embed(title="Your lineup", color=discord.Color.blue())
-    embed.add_field(name="Owned Puffs", value=ownedPuffsmessage)
-    embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed, ephemeral=not visible)
+
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,))
+    conn.commit()
+    cursor.execute("SELECT ShortenText FROM settings WHERE username = ?", (user_id,))
+    ShortenText = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    
+    view = LineupView(user_id, interaction.user.display_name, ShortenText)
+    await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=not visible)
 
 async def item_autocomplete(interaction: discord.Interaction, current: str):
     """
@@ -1378,14 +1459,14 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
     `puff_list` that contain the user input (case-insensitive match). The choices are created by
     splitting the items in `puff_list` by spaces and joining them with underscores.
     """
-    if flags.DEBUG:
+    if helpers.flags.DEBUG:
         print(f"info being entered for autocomplete {current}")
         print(f"First few puffs in puff_list {puff_list[:5]}")
     choices= [
         discord.app_commands.Choice(name=puff, value="_".join(puff.split(" ")))
         for puff in puff_list
-        if current.lower() in puff.lower()]
-    if flags.DEBUG:
+        if current.lower() in puff[0].lower()]
+    if helpers.flags.DEBUG:
         for choice in choices:
             print(f"Choice: name='{choice.name}', value='{choice.value}'")
     return choices
@@ -1420,8 +1501,9 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
-    embed.add_field(name="Stats", value=f"Health: {stats.split(';')[1]}\nAttack: {stats.split(';')[0]}")
-    embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
+    try: embed.add_field(name="Stats", value=f"Attack: {stats.split(';')[0]}\nHealth: {stats.split(';')[1]}\nCrit Chance: {stats.split(';')[2]}%\nCrit Damage: {stats.split(';')[3]}%", inline=False)
+    except AttributeError: embed.add_field(name="Stats", value="No stats available for this puff", inline=False)
+    embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
@@ -1445,7 +1527,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     """
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-        embed.set_image(url=f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
+        embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
@@ -1465,7 +1547,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     }
     chance = 100
     pity = None
-    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -1645,7 +1727,7 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     cursor.close()
     conn.close()
 
-    image_path = f"https://raw.githubusercontent.com/{flags.GIT_USERNAME}/{flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
     weightString = f"{rarityWeight*weightsMultipier.get(isRare)}%"
     if isRare >= 2:
         weightString += f" and {weightsMultipier.get(isRare+2)}%"
@@ -1675,11 +1757,12 @@ async def getlineup(ctx, arg: discord.User):
     :type arg: discord.User
     """
     user_id = arg.id
-    owned_puffs = battlefunctions.get_owned(user_id)
+    owned_puffs = helpers.battlefunctions.get_owned(user_id)
     puff_names = list(owned_puffs.keys())
-    puff_stats = battlefunctions.get_puffs_for_battle(puff_names, user_id)
-    lineup_puffs = battlefunctions.get_lineup(user_id)
-    ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
+    puff_stats = helpers.battlefunctions.get_puffs_for_battle(puff_names, user_id)
+    lineup_puffs = helpers.battlefunctions.get_lineup(user_id)
+    try: ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
+    except AttributeError: ownedPuffsmessage = "Code broke :skull:"
     embed = discord.Embed(title=f"{arg.display_name} lineup", color=discord.Color.blue())
     embed.add_field(name="Owned Puffs", value=ownedPuffsmessage)
     embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
@@ -1704,7 +1787,7 @@ async def ban(ctx, arg:discord.User, seconds: int):
     if banned_time is None or banned_time < time():
         banned_users[arg.id] = time() + seconds
         await ctx.send(f"{arg.display_name} has been banned for {seconds} seconds")
-        flags.BANNED_HANDLER.add_data([(arg.id, time() + seconds)])
+        helpers.flags.BANNED_HANDLER.add_data([(arg.id, time() + seconds)])
     else:
         await ctx.send(f"{arg.display_name} is already banned for {banned_time - time()} seconds")
 
@@ -1727,7 +1810,7 @@ async def unban(ctx, arg:discord.User):
     if banned_time is not None and banned_time > time():
         banned_users[arg.id] = time() - 1
         await ctx.send(f"{arg.display_name} has been unbanned")
-        flags.BANNED_HANDLER.add_data([(arg.id, time() - 1)])
+        helpers.flags.BANNED_HANDLER.add_data([(arg.id, time() - 1)])
     else:
         await ctx.send(f"{arg.display_name} is not banned or the ban has expired")
 
@@ -1740,11 +1823,11 @@ async def getmaxpity(ctx):
     user_id = ctx.author.id
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.execute("UPDATE stats SET pity = " + str(flags.PITY_LIMIT) + " WHERE username = ?", (user_id,))
+    cursor.execute("UPDATE stats SET pity = " + str(helpers.flags.PITY_LIMIT) + " WHERE username = ?", (user_id,))
     conn.commit()
     cursor.close()
     conn.close()
-    await ctx.send(f"Pity for {ctx.author.display_name} has been set to the maximum limit of {flags.PITY_LIMIT}.")
+    await ctx.send(f"Pity for {ctx.author.display_name} has been set to the maximum limit of {helpers.flags.PITY_LIMIT}.")
 
 @bot.command()
 @is_authorised_user()
@@ -1759,7 +1842,7 @@ async def devdocs(ctx):
     """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
-    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)\n * `!getmaxpity` gives you the max pity in the game", inline=False)
     embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
@@ -1783,11 +1866,14 @@ async def on_command_error(ctx, error):
     if isinstance(error, NotAdmin):# Would only be for admin commands right now
         print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
     elif isinstance(error, BannedPlayerCtx):
-        if flags.PRINT_EXTRA_ERROR_MESSAGES:
+        if helpers.flags.PRINT_EXTRA_ERROR_MESSAGES:
             print(f"{ctx.author.display_name}({ctx.author.id}) tried to use the bot while banned")
     elif isinstance(error, commands.errors.CommandNotFound):
-        if flags.PRINT_EXTRA_ERROR_MESSAGES:
+        if helpers.flags.PRINT_EXTRA_ERROR_MESSAGES:
             print(f"{ctx.author.display_name}({ctx.author.id}) tried to use a command that doesn't exist")
+    elif isinstance(error, commands.BadArgument):
+        if helpers.flags.PRINT_EXTRA_ERROR_MESSAGES:
+            print(f"{ctx.author.display_name}({ctx.author.id}) provided an invalid argument for a command: {error}")
     else:
         raise error
 
@@ -1805,7 +1891,7 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     if the error is an instance of `BannedPlayer`. If the error is indeed a `BannedPlayer`
     """
     if isinstance(error, BannedPlayer):
-        if flags.PRINT_EXTRA_ERROR_MESSAGES:
+        if helpers.flags.PRINT_EXTRA_ERROR_MESSAGES:
             print(f"{interaction.user.display_name}({interaction.user.id}) tried to use the bot while banned")
     else:
         raise error
