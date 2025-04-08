@@ -1,6 +1,5 @@
-import platform
 from discord import Activity, ActivityType
-import daemons
+import helpers.daemons as daemons
 from os import name as os_name
 
 ### Control variables

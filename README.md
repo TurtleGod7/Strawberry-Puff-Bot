@@ -15,8 +15,6 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 - Customizable settings
 - And more!
 
-### Read the following section if you want to play with the bot and don't want a copy of it, else go to [Installation](#installation) and [Usage](#usage)
-
 ## Bot Info
 
 This bot is live and is available for you to add to your Discord server whenever you want!
@@ -27,9 +25,13 @@ This bot is live and is available for you to add to your Discord server whenever
 
 - [Guild (Server) Install](https://discord.com/oauth2/authorize?client_id=1338650603617910817&permissions=277025507328&integration_type=0&scope=bot)
 
+- [New All Purpose Link](https://discord.com/oauth2/authorize?client_id=1338650603617910817)
+
 The bot's discord username is `Strawberry Puff Bot#3856` and its App ID is `1338650603617910817`. Please use this if you need help verifying my bot. Also on the bot's profile the "Copy Link" option links to the Guild Install link provided above.
 
 By the way, currently I don't have the capabilities to have the bot running 24/7, so expect there to be lots of downtime for bot usage. Although. there happens to be a setting that pings you on startup if you're worrying about when you can play with the bot. Other then that, have fun playing with this passion project I made and make sure to thank @orchadork for the drawings!!!
+
+---
 
 ## Installation
 
@@ -83,7 +85,7 @@ Please ensure your Python version is 3.6.X and greater[^1]. The code will not ru
 ## Project Structure
 
 The repository is organized as follows:
-    
+
 ```bash
 Strawberry-Puff-Bot/
 ├── assets/
@@ -125,10 +127,10 @@ The code was written by @TurtleGod7 and the puffs were drawn and created by @orc
 
 [^2]: If you need help creating a venv, I've found [this](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) to be useful when I first set it up.
 
-[^3]: If you need help with retrieving your bot's token, you may refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
+[^3]: If you need help with retrieving your bot's token, refer to this [Github Wiki Page](https://github.com/reactiflux/discord-irc/wiki/creating-a-discord-bot-&-getting-a-token) for more information
 
-[^4]: This is optional due to the images being referenced from the online repository. Note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. Please change these strings only if you change images
+[^4]: This is optional due to the images being referenced from the online repository. Do note that when you make changes like adding new images, they will only show up on Discord if your images have been pushed to GitHub. So please change these strings only if you change images
 
 [^5]: If you want to wipe any data, make sure you create two databases at these file paths (relative):
-    assets/database/puffs.db (HIGHLY UNRECOMMEND)
+    assets/database/puffs.db (HIGHLY UNRECOMMEND TO WIPE)
     assets/database/users.db

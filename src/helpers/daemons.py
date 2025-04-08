@@ -10,7 +10,7 @@ from subprocess import Popen
 class BannedUsersHandler:
     def __init__(self, db_name="users.db", interval=1800):
         """Initialize the database connection and start the background commit thread."""
-        db_path = "assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name
+        db_path = "D:\\All Users\\aks0302\\Code\\Discord\\Wendy-Puff-Bot\\src\\assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name # Pathlib??
         self.conn = connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.interval = interval
@@ -121,3 +121,9 @@ class PuffRetriever:
         """Start the background commit thread."""
         commit_thread = Thread(target=self._periodic_commit, daemon=True)
         commit_thread.start()
+
+import os
+
+# Get the current working directory
+current_working_directory = os.getcwd()
+print(__file__)

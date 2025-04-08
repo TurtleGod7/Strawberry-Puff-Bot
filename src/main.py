@@ -798,7 +798,7 @@ async def information(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Comparison calculations",
-        value="This works by comparing your rolls to another user, so you can see how lucky you are compared to them. This is done by comparing the amount of rolls, limited rarity puffs, gold rarity puffs, purple rarity puffs, the average pity, and ascensions.\nAlso, the embed color signifies if on average if you have better stats. It's calculated by having each value better as 1 and worse as -1. First it starts with the mean of each ascension together. that value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. (**less** is better for pity/rolls, everything else, **more** is better)\n-# Please check `/statistics` for what you've rolled.",
+        value="This works by comparing your rolls to another user, so you can see how lucky you are compared to them. This is done by comparing the amount of KDR (from battles), limited rarity puffs, gold rarity puffs, purple rarity puffs, the average pity, and ascensions.\nAlso, the embed color signifies if on average if you have better stats. It's calculated by having each value better as 1 and worse as -1. First it starts with the mean of each ascension together. that value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. (**less** is better for pity/rolls, everything else, **more** is better)\n-# Please check `/statistics` for what you've rolled.",
         inline=False
     )
     embed.add_field(
@@ -948,20 +948,20 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity FROM stats WHERE username = ?", (client_user_id,))
+    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity, win, loss FROM stats WHERE username = ?", (client_user_id,))
     clientChoice = cursor.fetchone()
 
-    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity FROM stats WHERE username = ?", (target_user_id,))
+    cursor.execute("SELECT rolls, limited, gold, purple, rolledGolds, avgPity, win, loss FROM stats WHERE username = ?", (target_user_id,))
     targetChoice = cursor.fetchone()
 
     cursor.close()
     conn.close()
 
-    try: clientRolls, clientLimited, clientGold, clientPurple, clientRolled, clientavgPity = clientChoice
+    try: clientRolls, clientLimited, clientGold, clientPurple, clientRolled, clientavgPity, clientWin, clientLoss = clientChoice
     except:
         await interaction.response.send_message("Please use another function as your data account hasn't been created", ephemeral=True)
         return
-    try: targetRolls, targetLimited, targetGold, targetPurple, targetRolled, targetavgPity = targetChoice
+    try: targetRolls, targetLimited, targetGold, targetPurple, targetRolled, targetavgPity, targetWin, targetLoss = targetChoice
     except:
         await interaction.response.send_message("Please ask the person you are comparing to to use another function as their data account hasn't been created", ephemeral=True)
         return
@@ -971,22 +971,31 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
     targetFrequency = unpack_rolled_info(targetRolled, True)
 
     diffRolls = targetRolls-clientRolls# Doing differences calculations
-    diffPity = targetavgPity-clientavgPity
     diffLimited = clientLimited-targetLimited
     diffGold = clientGold-targetGold
     diffPurple = clientPurple-targetPurple
+    if targetavgPity == 0 and clientavgPity == 0:
+        diffPity = targetavgPity-clientavgPity
+    elif targetavgPity == 0: diffPity = clientavgPity
+    else: diffPity = targetavgPity
+    if targetLoss == 0: targetLoss = 1
+    if clientLoss == 0: clientLoss = 1
+    diffKDR = targetWin/targetLoss-clientWin/clientLoss
     diffPuffs = []# Same formatting as saving info to db
     common_keys = set(clientFrequency) & set(targetFrequency)
     client_dif_keys = set(clientFrequency) - common_keys
     target_dif_keys = set(targetFrequency) - common_keys
-
     diffPuffs.extend(f"{key}_{clientFrequency[key] - targetFrequency[key]}" for key in sorted(common_keys))
+    if helpers.flags.DEBUG: print(f"Common keys set {diffPuffs}")
     diffPuffs.extend(f"{key}_{clientFrequency[key]+1}" for key in sorted(client_dif_keys))
-    diffPuffs.extend(f"{key}_{targetFrequency[key]-1}" for key in sorted(target_dif_keys))
+    if helpers.flags.DEBUG: print(f"Client keys set {diffPuffs}")
+    diffPuffs.extend(f"{key}_{-(targetFrequency[key]+1)}" for key in sorted(target_dif_keys))
+    if helpers.flags.DEBUG: print(f"Target keys set {diffPuffs}")
 
     averageList = []
-    varList = [diffPity, diffRolls, diffLimited, diffGold, diffPurple]
+    varList = [diffPity, diffKDR, diffLimited, diffGold, diffPurple]
     for i in range(len(varList)):
+        if helpers.flags.DEBUG: print(f"varList[{i}] = {varList[i]}")
         if varList[i] >= 0:
             averageList.append(1)
         else:
@@ -1007,12 +1016,13 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
         diffPuffsdict[val.split("_")[0]] = int(val.split("_")[1])
 
     embed = discord.Embed(title=f"Puff Comparison with {await bot.fetch_user(target_user_id)}", color=color)
-    embed.add_field(name="Rolls", value=f"You have {abs(diffRolls)} {'more' if diffRolls < 0 else 'less'} rolls than them", inline=False)
+    embed.add_field(name="Rolls*", value=f"You have {abs(diffRolls)} {'more' if diffRolls < 0 else 'less'} rolls than them", inline=False)
     embed.add_field(name="Average Pity", value=f"Your average pity is {round(abs(diffPity),2)} {'more' if diffPity < 0 else 'less'} than them", inline=False)
     embed.add_field(name="Limiteds", value=f"You have {abs(diffLimited)} {'more' if diffLimited > 0 else 'less'} limited puffs than them", inline=False)
     embed.add_field(name="Golds", value=f"You have {abs(diffGold)} {'more' if diffGold > 0 else 'less'} gold puffs than them", inline=False)
     embed.add_field(name="Purples", value=f"You have {abs(diffPurple)} {'more' if diffPurple > 0 else 'less'} purple puffs than them", inline=False)
     embed.add_field(name="More Gold/Limited Info", value = "\n".join(f"* You have {v} more {k}s than them" if v >= 0 else f"* You have {abs(v)} less {k}s than them" for k, v in diffPuffsdict.items()), inline=False)
+    embed.add_field(name="KDR", value=f"Your KDR is {round(abs(diffKDR),2)} {'more' if diffKDR < 0 else 'less'} than them", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
@@ -1847,7 +1857,21 @@ async def devdocs(ctx):
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-### All the functions below this comment are to catch errors ###
+### All the functions below this comment are to catch errors (or are coro args) ###
+
+@bot.event
+async def on_message(message: discord.Message):
+    '''
+    The `on_message` function is an event handler that processes messages sent in the Discord server.
+    It checks if the message meets certain conditions so it can react to specific content or commands.
+    '''
+    if "i hate" in message.content.lower():
+        await message.add_reaction("👎")
+        await message.add_reaction("❌")
+    elif "skater puff" in message.content.lower():
+        await message.add_reaction("<:skater:1345246453911781437>")
+
+    await bot.process_commands(message)
 
 @bot.event
 async def on_command_error(ctx, error):

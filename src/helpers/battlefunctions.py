@@ -1,4 +1,4 @@
-from flags import DEBUG
+from helpers.flags import DEBUG
 from sqlite3 import connect
 from os import name as os_name
 from random import randint
