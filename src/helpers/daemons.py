@@ -6,11 +6,13 @@ from threading import Thread, Lock
 from atexit import register
 from ctypes import windll
 from subprocess import Popen
+from pathlib import Path
 
 class BannedUsersHandler:
     def __init__(self, db_name="users.db", interval=1800):
-        """Initialize the database connection and start the background commit thread."""
-        db_path = "D:\\All Users\\aks0302\\Code\\Discord\\Wendy-Puff-Bot\\src\\assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name # Pathlib??
+        # Resolve path to: src/assets/database/users.db
+        base_dir = Path(__file__).resolve().parent.parent  # goes from src/helpers -> src
+        db_path = str(base_dir / "assets" / "database" / db_name)  # goes from src -> assets/database/users.db
         self.conn = connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.interval = interval
