@@ -486,7 +486,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn.close()
 
     numsuffix = {1 : "st", 2 : "nd"}
-    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{image_path}?=raw"
+    image_path = helpers.flags.IMAGE_PATH + f"puffs/{image_path}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -898,7 +898,7 @@ async def showBanner(interaction: discord.Interaction):
     delta_time = f"<t:{end_time}:R>" if delta_time > 0 else "Ended"
 
     embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-    embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/profile/{helpers.flags.BANNER_FILE}?=raw")
+    embed.set_image(url=helpers.flags.IMAGE_PATH + f"profile/{helpers.flags.BANNER_FILE}?=raw")
     embed.add_field(name="Banner Dates", value=f"Start: <t:{start_time}:F>\nEnd: <t:{end_time}:F>\nTime till end: {delta_time}", inline=False)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -1513,7 +1513,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     try: embed.add_field(name="Stats", value=f"Attack: {stats.split(';')[0]}\nHealth: {stats.split(';')[1]}\nCrit Chance: {stats.split(';')[2]}%\nCrit Damage: {stats.split(';')[3]}%", inline=False)
     except AttributeError: embed.add_field(name="Stats", value="No stats available for this puff", inline=False)
-    embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{imagepath}?=raw")
+    embed.set_image(url=helpers.flags.IMAGE_PATH + f"puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
@@ -1537,7 +1537,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     """
     if len(str(arg).split("_")) > 1:
         embed = discord.Embed(title="Latest Banner", color=discord.Color.dark_theme())
-        embed.set_image(url=f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/profile/{str(arg)+'.gif'}?=raw")
+        embed.set_image(url=helpers.flags.IMAGE_PATH + f"profile/{str(arg)+'.gif'}?=raw")
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
@@ -1557,7 +1557,7 @@ async def get(ctx, *, arg: ToLowerConverter):
     }
     chance = 100
     pity = None
-    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = helpers.flags.IMAGE_PATH + f"puffs/{file}?=raw"
 
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
@@ -1706,11 +1706,43 @@ async def deleteacct(ctx, table, arg: discord.User):
     cursor = conn.cursor()
     cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {table} WHERE username = ?)", (user_id,))
     if cursor.fetchone()[0] == 1:
-        cursor.execute(f"DELETE FROM {table} (username) VALUES (?)", (user_id,))
+        cursor.execute(f"DELETE FROM {table} WHERE username = ?", (user_id,))
         conn.commit()
         await ctx.send(f"Account deleted for {arg.display_name} in {table}")
     cursor.close()
     conn.close()
+
+@bot.command()
+@is_authorised_user()
+async def setvalue(ctx, person: discord.User, table, column, value):
+    """
+    This Python function updates a specific column in a database table for a given user with a new value.
+
+    :param ctx: The `ctx` parameter in the `set` function represents the context in which a command is
+    being invoked. It contains information about the message, the channel, the author of the message,
+    and other relevant details needed to process the command effectively
+    :param table: The `table` parameter in the `set` function represents the name of the database table
+    where the update operation will be performed. It specifies which table to target when updating a
+    specific column for a given user
+    :param person: The `person` parameter in the `set` function represents a Discord user object. It is
+    used to identify the user whose record in the specified database table will be updated with a new
+    value for a specific column
+    :param column: The `column` parameter in the `set` function represents the name of the column in the
+    database table that you want to update. It specifies which column's value will be changed for the
+    specified user
+    :param value: The `value` parameter in the `set` function represents the new value that you want to
+    set for the specified column in the database table for the given user. This value will replace the
+    existing value in the specified column for the user
+    :type person: discord.User
+    """
+    user_id = person.id
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute(f"UPDATE {table} SET {column} = ? WHERE username = ?", (value, user_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    await ctx.send(f"Updated {column} to {value} for {person.display_name} in {table}")
 
 @bot.command()
 @is_authorised_user()
@@ -1737,7 +1769,7 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     cursor.close()
     conn.close()
 
-    image_path = f"https://raw.githubusercontent.com/{helpers.flags.GIT_USERNAME}/{helpers.flags.GIT_REPO}/refs/heads/main/assets/puffs/{file}?=raw"
+    image_path = helpers.flags.IMAGE_PATH + f"puffs/{file}?=raw"
     weightString = f"{rarityWeight*weightsMultipier.get(isRare)}%"
     if isRare >= 2:
         weightString += f" and {weightsMultipier.get(isRare+2)}%"
@@ -1852,12 +1884,34 @@ async def devdocs(ctx):
     """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
-    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)\n * `!getmaxpity` gives you the max pity in the game", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!setvalue` sets a certain value in a table and column in the users db based on a value and a user id, (input order is: person, table, column, value)\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)\n * `!getmaxpity` gives you the max pity in the game", inline=False)
     embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
 ### All the functions below this comment are to catch errors (or are coro args) ###
+
+async def checkMessage(message: discord.Message):
+    '''
+    The function `checkMessage` is an event handler that checks the content of a message and adds
+    reactions based on specific keywords or phrases found in the message. Refactored to be easier to 
+    add checks instead of manipulating ifs and elifs.
+    
+    :param message: The `message` parameter in the `checkMessage` function represents a Discord message
+    object. It contains information about the message, such as its content, author, channel, and other
+    relevant details. This parameter is used to check the content of the message and add reactions
+    based on specific keywords or phrases found in the message
+    '''
+    if "i hate" in message.content.lower():
+        await message.add_reaction("👎")
+        await message.add_reaction("❌")
+        return
+    if "skater puff" in message.content.lower():
+        await message.add_reaction("<:skater:1345246453911781437>")
+    if "demon puff" in message.content.lower():
+        await message.add_reaction("<:demon:1359667344552497344>")
+
+    return
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -1865,12 +1919,7 @@ async def on_message(message: discord.Message):
     The `on_message` function is an event handler that processes messages sent in the Discord server.
     It checks if the message meets certain conditions so it can react to specific content or commands.
     '''
-    if "i hate" in message.content.lower():
-        await message.add_reaction("👎")
-        await message.add_reaction("❌")
-    elif "skater puff" in message.content.lower():
-        await message.add_reaction("<:skater:1345246453911781437>")
-
+    await checkMessage(message)
     await bot.process_commands(message)
 
 @bot.event

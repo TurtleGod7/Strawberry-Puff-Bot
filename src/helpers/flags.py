@@ -21,6 +21,7 @@ BANNER_FILE = "banner_demon.gif"
 BANNER_NAME = BANNER_FILE.split('_')[1].split('.')[0].capitalize() + " Puff"  # Extract name from banner file
 BANNER_START = "4/2/2025"
 BANNER_END = "5/1/2025"
+IMAGE_PATH = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/src/assets/"
 RARITY_WEIGHTS = [.887, .083, .03]
 LIMITED_WEIGHTS = [.8, .2]
 STATUSES = [

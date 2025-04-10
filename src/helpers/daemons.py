@@ -1,5 +1,4 @@
 from sqlite3 import connect
-from os import name as os_name
 from platform import uname as os_uname
 from time import sleep
 from threading import Thread, Lock
@@ -64,7 +63,7 @@ class SleepPrevention:
 
     def _prevent_sleep(self):
         """Prevent system from sleeping depending on OS."""
-        if os_name == "nt":  # Windows
+        if os_uname().system == "Windows":  # Windows
             ES_CONTINUOUS = 0x80000000
             ES_SYSTEM_REQUIRED = 0x00000001
             while True: self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
@@ -89,7 +88,7 @@ class SleepPrevention:
 class PuffRetriever:
     def __init__(self, global_var, db_name="puffs.db", interval=10):
         """Initialize the database connection and start the background commit thread."""
-        db_path = "assets\\database\\" + db_name if os_name == "nt" else "assets/database/" + db_name
+        db_path = "assets\\database\\" + db_name if os_uname().system == "Windows" else "assets/database/" + db_name
         self.conn = connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.interval = interval
@@ -123,9 +122,3 @@ class PuffRetriever:
         """Start the background commit thread."""
         commit_thread = Thread(target=self._periodic_commit, daemon=True)
         commit_thread.start()
-
-import os
-
-# Get the current working directory
-current_working_directory = os.getcwd()
-print(__file__)
