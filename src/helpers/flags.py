@@ -1,6 +1,7 @@
+from pathlib import Path
 from discord import Activity, ActivityType
 import helpers.daemons as daemons
-from os import name as os_name
+
 
 ### Control variables
 BANNED_HANDLER = daemons.BannedUsersHandler()
@@ -16,7 +17,7 @@ BUTTON_PAGE_EXPIRY = 60
 ITEMS_PER_PAGE = 5
 SETTINGS_EXPIRY = 60
 ASCENSION_MAX = 10
-AVATAR_PATH = "assets\\puffs\\luna.png" if os_name == "nt" else "assets/puffs/luna.png" # This and banner to be used when setting it as a gif
+AVATAR_PATH = str(Path("assets/puffs/luna.png")) # This and banner to be used when setting it as a gif
 BANNER_FILE = "banner_demon.gif"
 BANNER_NAME = BANNER_FILE.split('_')[1].split('.')[0].capitalize() + " Puff"  # Extract name from banner file
 BANNER_START = "4/2/2025"

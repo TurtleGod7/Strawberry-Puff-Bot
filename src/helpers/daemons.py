@@ -66,7 +66,9 @@ class SleepPrevention:
         if os_uname().system == "Windows":  # Windows
             ES_CONTINUOUS = 0x80000000
             ES_SYSTEM_REQUIRED = 0x00000001
-            while True: self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+            while True: 
+                self.sleep_proc = windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+                sleep(60)  # Sleep for 60 seconds before resetting the state
         elif os_uname().system == "Darwin":  # macOS
             self.sleep_proc = Popen(["caffeinate"])  # Keeps system awake
         elif os_uname().system == "Linux":  # Linux

@@ -3,6 +3,9 @@ from sqlite3 import connect
 from os import name as os_name
 from random import randint
 from re import sub, escape
+from pathlib import Path
+
+from main import get_db_connection, round_int
 
 def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
     """
@@ -34,19 +37,18 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
 # The class `Puff` represents a character with attributes such as name, attack, health, owner, and
 # level, with a method to level up the character.
 class Puff:
-    def __init__(self, name, attack, health, owner, critChance, critDmg, level=0):
+    def __init__(self, name, data, owner, level=0):
+        
         self.name = name
-        self.attack = attack
-        self.health = health
+        self.attack = data[0]
+        self.health = data[1]
         self.level = level
         self.owner = owner
-        self.critChance = critChance
-        self.critDmg = critDmg
-
-    def level_up(self):
-        self.level += 1
-        self.attack += 1
-        self.health += 2
+        self.critChance = data[2]
+        self.critDmg = data[3]
+        self.defense = data[4]
+        self.defensePenetration = data[5]
+        self.trueDefense = data[6]
 
 def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     """
@@ -90,7 +92,7 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     cursor.close()
     conn.close()
     for puff in range(len(puff_data)):
-        attack, health, critChance, critDmg = list(map(int,puff_data[puff][0].split(";")))
+        data = list(map(int,puff_data[puff][0].split(";")))
 
         # If user_id is provided, get the user's level for the puff
         level = 0
@@ -100,10 +102,12 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
             continue
 
         # Scale stats based on level
-        attack += level
-        health += level * 2
-
-        final_data.append(Puff(puff_names[puff], attack, health, user_id, critChance, critDmg, level))
+        data[0] += level # Attack
+        data[1] += level * 2 # health
+        data[4] += round_int(.25*level**1.75) # Defense
+        final_data.append(
+            Puff(puff_names[puff],data,user_id, level)
+        )
 
     return final_data
 
@@ -194,16 +198,28 @@ def battle(puff1: Puff, puff2: Puff):
     while puff1.health > 0 and puff2.health > 0:
         if DEBUG:
             print(f"{puff1.name} ({puff1.health}) vs {puff2.name} ({puff2.health})\nOpponent: {puff1.owner} vs {puff2.owner}")
-
+        # BATTLE LOGIC
         chance = randint(1, 100)
-
         # Owner's puff attacks first
-        if chance <= puff1.critChance: puff2.health -= puff1.attack * (puff1.critDmg*.10 + 1)
-        else: puff2.health -= puff1.attack
+        attack = 0
+        if chance <= puff1.critChance:
+            attack = puff1.attack * (puff1.critDmg*.10 + 1)
+        else:
+            attack = puff1.attack
+        SafeDmg= attack * puff1.defensePenetration# Dmg safe from normal def
+        DefendableDmg = (attack-SafeDmg)*(1-(puff2.defense*.01))
+        attack = SafeDmg + DefendableDmg - puff2.trueDefense
+        puff2.health -= attack
         # Opponent's puff attacks next
-        if chance <= puff2.critChance: puff1.health -= puff2.attack * (puff2.critDmg*.10 + 1)
-        else: puff1.health -= puff2.attack
-
+        attack = 0 # Resets for next calculationn
+        if chance <= puff2.critChance:
+            attack = puff2.attack * (puff2.critDmg*.10 + 1)
+        else:
+            attack = puff2.attack
+        SafeDmg= attack * puff2.defensePenetration
+        DefendableDmg = (attack-SafeDmg)*(1-(puff1.defense*.01))
+        attack = SafeDmg + DefendableDmg - puff1.trueDefense
+        puff1.health -= attack
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
         if puff1.health <= 0 and puff2.health <= 0:
@@ -213,29 +229,3 @@ def battle(puff1: Puff, puff2: Puff):
         if puff1.health <= 0:
             return f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1
     return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0 # Catch all
-
-def shorten_message(message: str) -> str:
-    """
-    The function `shorten_message` truncates a message to a maximum length of 2000 characters and adds
-    an ellipsis if it exceeds that length.
-
-    :param message: The `message` parameter in the `shorten_message` function is a string that represents
-    the message to be shortened if it exceeds a certain length
-    :return: The function `shorten_message` returns the original message if its length is less than or
-    equal to 2000 characters. If the message exceeds 2000 characters, it truncates the message to 2000
-    characters and appends an ellipsis ("...") at the end before returning it.
-    """
-    keywords = {
-        "Level": "Lvl",
-        "Attack": "Atk",
-        "Health": "HP",
-        "Crit Chance" : "Crit%",
-        "Crit Damage": "Crit Dmg",
-    }
-    
-    for phrase in keywords.keys():
-        # Escape special characters in phrase for regex and match word boundaries
-        pattern = r'\b' + escape(phrase) + r'\b'
-        message = sub(pattern, keywords[phrase], message)
-    
-    return message
