@@ -275,6 +275,7 @@ def split_on_newlines(text: str, max_length=1024):
         if newline_pos != -1:
             # Makes sure to not split in the middle of a section
             if text[newline_pos + 2] == " ": newline_pos = text.rfind('\n', start, newline_pos)
+            if text[newline_pos + 2] == " ": newline_pos = text.rfind('\n', start, newline_pos)
             result.append(text[start:newline_pos + 1])  # Include the newline
             start = newline_pos + 1
         else:
@@ -878,7 +879,7 @@ class InformationView(discord.ui.View):
             {
                 "title" : "Types and Type Effectiveness",
                 "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
-                "image" : flags.IMAGE_PATH + "tables/typechart.png"
+                "image" : flags.IMAGE_PATH + "tables/typechartwhite.png"
             },
             {
                 "title": "Stat Scaling",
@@ -1509,15 +1510,23 @@ class LineupView(discord.ui.View):
         self.user_id = user_id
         self.display_name = display_name
         self.owned_puffs = battlefunctions.get_owned(self.user_id)
-        self.puff_names = list(self.owned_puffs.keys())
+        self.sort_by_level = True  # Default sorting is by level
+        self.level_order = True
+        self.page = 0
+        self.update_puff_data()
+
+    def update_puff_data(self):
+        if self.sort_by_level:
+            self.puff_names = sorted(self.owned_puffs.keys(), key=lambda name: self.owned_puffs[name], reverse=self.level_order)
+        else:
+            self.puff_names = sorted(self.owned_puffs.keys(), reverse=self.level_order)
         self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id)
         self.lineup_puffs = battlefunctions.get_lineup(self.user_id)
-        self.page = 0
         ownedPuffsmessage = "\n".join(
             f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}% Defense: {puff.defense}% Defense Penetration: {puff.defensePenetration}% True Defense: {puff.trueDefense}\n   * Types: {puff.types[0].damageType()}" + (f' / {puff.types[1].damageType()}' if len(puff.types) > 1 else '')
             for puff in self.puff_stats
         )
-        ownedPuffsmessage = shorten_message(ownedPuffsmessage, user_id)
+        ownedPuffsmessage = shorten_message(ownedPuffsmessage, self.user_id)
         self.items = split_on_newlines(ownedPuffsmessage)
 
     def generate_embed(self):
@@ -1525,8 +1534,7 @@ class LineupView(discord.ui.View):
         page_items = self.items[self.page]
 
         embed.add_field(name="Owned Puffs", value=page_items)
-        embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(self.lineup_puffs)))
-        embed.set_footer(text=f"Requested by {self.display_name}")
+        embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i, puff in enumerate(self.lineup_puffs)))
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items)}")
         return embed
 
@@ -1541,6 +1549,22 @@ class LineupView(discord.ui.View):
         if self.page + 1 < len(self.items):
             self.page += 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="🔄 Sort by Name", style=discord.ButtonStyle.secondary)
+    async def toggle_sort(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.sort_by_level = not self.sort_by_level
+        button.label = "🔄 Sort by Level" if not self.sort_by_level else "🔄 Sort by Name"
+        self.update_puff_data()
+        self.page = 0  # Reset to the first page after sorting
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="🔄 Change to Ascending Order", style=discord.ButtonStyle.secondary)
+    async def flip_order(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.level_order = not self.level_order
+        button.label = "🔄 Change to Descending Order" if not self.level_order else "🔄 Change to Ascending Order"
+        self.update_puff_data()
+        self.page = 0  # Reset to the first page after sorting
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
 @bot.tree.command(name="lineup", description="Show your lineup")
 @discord.app_commands.check(is_banned_user)
@@ -1627,7 +1651,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     stats_message = shorten_message(
-        f"Attack: {stats.split(';')[0]}\nHealth: {stats.split(';')[1]}\nCrit Chance: {stats.split(';')[2]}%\nCrit Damage: {stats.split(';')[3]}%\nDefense: {stats.split(';')[4]}%\nDefense Penetration: {stats.split(';')[5]}%\nTrue Defense: {stats.split(';')[6]}", 
+        f"Attack: {stats.split(';')[0]}\nHealth: {stats.split(';')[1]}\nCrit Chance: {stats.split(';')[2]}%\nCrit Damage: {stats.split(';')[3]}%\nDefense: {stats.split(';')[4]}%\nDefense Penetration: {stats.split(';')[5]}%\nTrue Defense: {stats.split(';')[6]}",
         interaction.user.id
     )
     try: embed.add_field(name="Stats", value=stats_message, inline=False)
@@ -1887,8 +1911,8 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     file = str(arg) + ".png"
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT name, description, isRare, stats FROM puffs WHERE imagepath = ?", (file,))
-    name, description, isRare, stats = cursor.fetchone()
+    cursor.execute("SELECT name, description, isRare, stats, types FROM puffs WHERE imagepath = ?", (file,))
+    name, description, isRare, stats, types = cursor.fetchone()
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRare,))
     rarityWeight = cursor.fetchone()[0]
     cursor.close()
@@ -1905,6 +1929,7 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     embed.add_field(name="Chance", value=weightString, inline=False)
     embed.add_field(name="Stats", value=f"Attacks: {stats.split(';')[0]} Health: {stats.split(';')[1]}", inline=False)
+    embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     embed.set_image(url=image_path)
     await ctx.send(embed=embed)
@@ -1924,17 +1949,9 @@ async def getlineup(ctx, arg: discord.User):
     :type arg: discord.User
     """
     user_id = arg.id
-    owned_puffs = battlefunctions.get_owned(user_id)
-    puff_names = list(owned_puffs.keys())
-    puff_stats = battlefunctions.get_puffs_for_battle(puff_names, user_id)
-    lineup_puffs = battlefunctions.get_lineup(user_id)
-    try: ownedPuffsmessage = "\n".join(f"* {puff.name} (Lvl {puff.level})\n    * Attack: {puff.attack} Health: {puff.health}" for puff in puff_stats)
-    except AttributeError: ownedPuffsmessage = "Code broke :skull:"
-    embed = discord.Embed(title=f"{arg.display_name} lineup", color=discord.Color.blue())
-    embed.add_field(name="Owned Puffs", value=ownedPuffsmessage)
-    embed.add_field(name="Puffs in your lineup", value="\n".join(f"{i+1}. **{puff}**" for i,puff in enumerate(lineup_puffs)))
-    embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
-    await ctx.send(embed=embed)
+
+    view = LineupView(user_id, arg.display_name)
+    await ctx.send(embed=view.generate_embed(), view=view)
 
 @bot.command()
 @is_authorised_user()

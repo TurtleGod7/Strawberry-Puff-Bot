@@ -152,7 +152,7 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
         types = puff_data[puff][1].split(";")
         typeList = []
         if DEBUG: print(f"Original Types: {types}")
-        for type in types: 
+        for type in types:
             try: typeList.append(typeChart[type]())
             except: continue
         if DEBUG: print(f"Final Types: {typeList}")
