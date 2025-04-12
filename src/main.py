@@ -260,7 +260,7 @@ def get_db_connection(path: str, check_same_thread: bool = False) -> Connection:
     db_path = str(Path(path))
     return connect(db_path, check_same_thread=check_same_thread)
 
-def split_on_newlines(text, max_length=1000):
+def split_on_newlines(text: str, max_length=1024):
     result = []
     start = 0
     while start < len(text):
@@ -273,6 +273,8 @@ def split_on_newlines(text, max_length=1000):
         # Try to find the last newline before the max length
         newline_pos = text.rfind('\n', start, end)
         if newline_pos != -1:
+            # Makes sure to not split in the middle of a section
+            if text[newline_pos + 2] == " ": newline_pos = text.rfind('\n', start, newline_pos)
             result.append(text[start:newline_pos + 1])  # Include the newline
             start = newline_pos + 1
         else:
@@ -814,71 +816,76 @@ class InformationView(discord.ui.View):
             {
                 "title": "Rarities",
                 "description": "1. <:gray_square:1342727158673707018> is a limited puff (highest rarity)\n"
-                               "2. :yellow_square: is a gold rarity puff which is the next highest\u200b\n"
-                               "3. :purple_square: is a purple rarity puff that is the third rarest puff to get\u200b\n"
-                               "4. Finally a :blue_square: is a blue rarity puff that is the most common type to get\n"
-                               "Please check the `/chances` function to see what they correlate to."
+                                "2. :yellow_square: is a gold rarity puff which is the next highest\u200b\n"
+                                "3. :purple_square: is a purple rarity puff that is the third rarest puff to get\u200b\n"
+                                "4. Finally a :blue_square: is a blue rarity puff that is the most common type to get\n"
+                                "Please check the `/chances` function to see what they correlate to."
             },
             {
                 "title": "How is information saved?",
                 "description": "Information like\n* amount of rolls\n* pity\n* types of rolls\n"
-                               "are **NOT** server specific (AKA Discord-wide)\n\n"
-                               "This means that lets say you roll a puff in another server, this will affect your experience in this server."
+                                "are **NOT** server specific (AKA Discord-wide)\n\n"
+                                "This means that lets say you roll a puff in another server, this will affect your experience in this server."
             },
             {
                 "title": "Gacha system",
                 "description": f"This system works by initially rolling for the rarity at weights of "
-                               f"**{flags.RARITY_WEIGHTS[2]*100}**%, **{flags.RARITY_WEIGHTS[1]*100}**%, and "
-                               f"**{flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. "
-                               f"Then if you roll in the {flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited "
-                               f"which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puff's individual weights will apply."
+                                f"**{flags.RARITY_WEIGHTS[2]*100}**%, **{flags.RARITY_WEIGHTS[1]*100}**%, and "
+                                f"**{flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. "
+                                f"Then if you roll in the {flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited "
+                                f"which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puff's individual weights will apply."
             },
             {
                 "title": "Pity system",
                 "description": f"When you reach **{flags.PITY_LIMIT}** pity, you will roll only a gold/limited rarity puff "
-                               f"(check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs "
-                               f"have a higher chance of being selected compared to the less common ones.\n"
-                               f"-# By the way, your pity is only shown when you roll a gold/limited rarity puff, it is not public in the `/statistics` function."
+                                f"(check `/chances` for what they are). Although, this is a weighted roll, so that means that the more common puffs "
+                                f"have a higher chance of being selected compared to the less common ones.\n"
+                                f"-# By the way, your pity is only shown when you roll a gold/limited rarity puff, it is not public in the `/statistics` function."
             },
             {
                 "title": "Ascensions",
                 "description": f"These work exactly like eidolons/constellations (if you play Honkai: Star Rail or Genshin Impact), "
-                               f"but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{flags.ASCENSION_MAX}** ascension. "
-                               f"These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended."
+                                f"but as you get more gold rarity, you can increase the ascension of the puff up to the max of **{flags.ASCENSION_MAX}** ascension. "
+                                f"These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended."
             },
             {
                 "title": "Comparison calculations",
                 "description": "This works by comparing your rolls to another user, so you can see how lucky you are compared to them. "
-                               "This is done by comparing the amount of KDR (from battles), limited rarity puffs, gold rarity puffs, purple rarity puffs, "
-                               "the average pity, and ascensions.\n"
-                               "Also, the embed color signifies if on average you have better stats. It's calculated by having each value better as 1 and worse as -1. "
-                               "First it starts with the mean of each ascension together. That value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. "
-                               "(**less** is better for pity/rolls, everything else, **more** is better)\n"
-                               "-# Please check `/statistics` for what you've rolled."
+                                "This is done by comparing the amount of KDR (from battles), limited rarity puffs, gold rarity puffs, purple rarity puffs, "
+                                "the average pity, and ascensions.\n"
+                                "Also, the embed color signifies if on average you have better stats. It's calculated by having each value better as 1 and worse as -1. "
+                                "First it starts with the mean of each ascension together. That value is rounded to 1 or -1, whichever is closest to be averaged by mean with the other stats. "
+                                "(**less** is better for pity/rolls, everything else, **more** is better)\n"
+                                "-# Please check `/statistics` for what you've rolled."
             },
             {
                 "title": "Battle calculations",
                 "description": "The battling continues for every puff until someone's lineup ends (This **doesn't** give the other side the win). "
-                               "It works by each removing the other puff's health from the attack and checking for a draw, then if the challenger won, then if the opponent won. "
-                               "The average number of wins is used to calculate the wins and losses. The color logic from the comparison function is also implemented here."
+                                "It works by each removing the other puff's health from the attack and checking for a draw, then if the challenger won, then if the opponent won. "
+                                "The average number of wins is used to calculate the wins and losses. The color logic from the comparison function is also implemented here."
             },
             {
                 "title": "Battle statistics",
                 "description": "**Attack**: This is the amount of damage a puff can deal to the opponent's puff.\n"
-                               "**Health**: This is the amount of damage a puff can take before it faints\n"
-                               "**Chance**: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\n"
-                               "**Crit Damage**: This is the amount of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n"
-                               "**Defense**: This is the percent of damage the puff blocks\n"
-                               "**Defense Penetration**: This is the percent of defense the puff can shred through before it becomes blocked\n"
-                               "**True Defense**: The amount of damage the puff can protect from at all times\n\n"
-                               "These stats are important for determining how well your puffs perform in battles against other players."
+                                "**Health**: This is the amount of damage a puff can take before it faints\n"
+                                "**Chance**: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\n"
+                                "**Crit Damage**: This is the amount of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n"
+                                "**Defense**: This is the percent of damage the puff blocks\n"
+                                "**Defense Penetration**: This is the percent of defense the puff can shred through before it becomes blocked\n"
+                                "**True Defense**: The amount of damage the puff can protect from at all times\n\n"
+                                "These stats are important for determining how well your puffs perform in battles against other players."
+            },
+            {
+                "title" : "Types and Type Effectiveness",
+                "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
+                "image" : str(flags.IMAGE_PATH) + "tables/typechart.svg"
             },
             {
                 "title": "Stat Scaling",
                 "description": "This is the scaling of the stats for the puffs (These are additive to the base amount and x is the level). The scaling is as follows:\n"
-                               "Attack: 1x\n"
-                               "Health: 2x\n"
-                               "Defense: .25x^1.75 (rounded)\n"
+                                "Attack: 1x\n"
+                                "Health: 2x\n"
+                                "Defense: .25x^1.75 (rounded)\n"
             }
         ]
         self.page = 0
@@ -896,6 +903,8 @@ class InformationView(discord.ui.View):
 
         for item in page_data:
             embed.add_field(name=item["title"], value=item["description"], inline=False)
+            try: embed.set_image(url=item["image"])
+            except: continue
 
         total_pages = ceil(len(self.data) / self.items_per_page)
         embed.set_footer(text=f"Page {self.page + 1} / {total_pages}")
@@ -1505,7 +1514,7 @@ class LineupView(discord.ui.View):
         self.lineup_puffs = battlefunctions.get_lineup(self.user_id)
         self.page = 0
         ownedPuffsmessage = "\n".join(
-            f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}% Defense: {puff.defense}% Defense Penetration: {puff.defensePenetration}% True Defense: {puff.trueDefense}"
+            f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}% Defense: {puff.defense}% Defense Penetration: {puff.defensePenetration}% True Defense: {puff.trueDefense}\n   * Types: {puff.types[0].damageType()}" + (f' / {puff.types[1].damageType()}' if len(puff.types) > 1 else '')
             for puff in self.puff_stats
         )
         ownedPuffsmessage = shorten_message(ownedPuffsmessage, user_id)
@@ -1609,11 +1618,11 @@ async def preview(interaction: discord.Interaction, puff: str):
     puff = " ".join(puff.split("_"))
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT description, imagepath, isRare, stats FROM puffs WHERE name = ?", (puff,))
+    cursor.execute("SELECT description, imagepath, isRare, stats, types FROM puffs WHERE name = ?", (puff,))
     puff_data = cursor.fetchone()
     cursor.close()
     conn.close()
-    description, imagepath, isRare, stats = puff_data
+    description, imagepath, isRare, stats, types = puff_data
     embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
@@ -1623,6 +1632,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     )
     try: embed.add_field(name="Stats", value=stats_message, inline=False)
     except AttributeError: embed.add_field(name="Stats", value="No stats available for this puff", inline=False)
+    embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}", inline=False)
     embed.set_image(url=flags.IMAGE_PATH + f"puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
@@ -2104,7 +2114,8 @@ async def on_error(event, *args, **kwargs):
         print(f"🚨 Error in {event}:")
         print(error_details)
 
-# make the website
+# TODO: make the website
+### All of the code that follows is for the bot startup to run ###
 async def main():
     try:
         await bot.start(TOKEN) # type: ignore

@@ -1,11 +1,17 @@
+from typing import Sequence
 from helpers.flags import DEBUG
 from sqlite3 import connect
 from os import name as os_name
 from random import randint
-from re import sub, escape
-from pathlib import Path
+from main import round_int
 
-from main import get_db_connection, round_int
+effectivenessChart = {
+    "Melee": {"Melee": 0, "Ranged": .25, "Magic": -.25, "Support": 0, "Tank": -.25},
+    "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": .25},
+    "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": 0},
+    "Support": {"Melee": 0, "Ranged": 0, "Magic": -.25, "Support": 0, "Tank": .25},
+    "Tank": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": 0, "Tank": 0}
+}
 
 def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
     """
@@ -36,9 +42,43 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
 
 # The class `Puff` represents a character with attributes such as name, attack, health, owner, and
 # level, with a method to level up the character.
+class DamageType():
+    def __init__(self, type: str) -> None:
+        self.type = type
+
+    def damageType(self) -> str:
+        return self.type
+
+class MagicDamage(DamageType):
+    def __init__(self):
+        super().__init__("Magic")
+
+class RangedDamage(DamageType):
+    def __init__(self):
+        super().__init__("Ranged")
+
+class MeleeDamage(DamageType):
+    def __init__(self):
+        super().__init__("Melee")
+
+class SupportDamage(DamageType):
+    def __init__(self):
+        super().__init__("Support")
+
+class TankDamage(DamageType):
+    def __init__(self):
+        super().__init__("Tank")
+
+typeChart = {
+    "melee": MeleeDamage,
+    "ranged": RangedDamage,
+    "magic": MagicDamage,
+    "support": SupportDamage,
+    "tank": TankDamage
+}
+
 class Puff:
-    def __init__(self, name, data, owner, level=0):
-        
+    def __init__(self, name: str, data: Sequence[int|float], owner: int, types: list[DamageType], level=0):
         self.name = name
         self.attack = data[0]
         self.health = data[1]
@@ -49,6 +89,7 @@ class Puff:
         self.defense = data[4]
         self.defensePenetration = data[5]
         self.trueDefense = data[6]
+        self.types = types
 
 def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     """
@@ -72,7 +113,7 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     cursor = conn.cursor()
 
     for puff in puff_names:
-        cursor.execute("SELECT stats FROM puffs WHERE name = ?", (puff,))
+        cursor.execute("SELECT stats, types FROM puffs WHERE name = ?", (puff,))
         puff_data.append(cursor.fetchone())
 
     cursor.close()
@@ -83,17 +124,19 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
 
     cursor.execute("SELECT rolledGolds, rolledNormals FROM stats WHERE username = ?", (user_id,))
     data = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
     goldRolls = data[0] if data and data[0] else ""
     normalRolls = data[1] if data and data[1] else ""
     packedStats = goldRolls + ";" + normalRolls if goldRolls or normalRolls else ""
     if packedStats == "": packedStats = None
     unpackedStats = unpack_rolled_info(packedStats) # type: ignore
 
-    cursor.close()
-    conn.close()
     for puff in range(len(puff_data)):
         data = list(map(int,puff_data[puff][0].split(";")))
-
+        if DEBUG:
+            print(f"Unpacked stats: {data}")
         # If user_id is provided, get the user's level for the puff
         level = 0
         level = unpackedStats.get(puff_names[puff],-1)
@@ -105,8 +148,16 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
         data[0] += level # Attack
         data[1] += level * 2 # health
         data[4] += round_int(.25*level**1.75) # Defense
+
+        types = puff_data[puff][1].split(";")
+        typeList = []
+        if DEBUG: print(f"Original Types: {types}")
+        for type in types: 
+            try: typeList.append(typeChart[type]())
+            except: continue
+        if DEBUG: print(f"Final Types: {typeList}")
         final_data.append(
-            Puff(puff_names[puff],data,user_id, level)
+            Puff(puff_names[puff],data,user_id, typeList, level)
         )
 
     return final_data
@@ -202,6 +253,7 @@ def battle(puff1: Puff, puff2: Puff):
         chance = randint(1, 100)
         # Owner's puff attacks first
         attack = 0
+        typeBuff = 0
         if chance <= puff1.critChance:
             attack = puff1.attack * (puff1.critDmg*.10 + 1)
         else:
@@ -209,9 +261,15 @@ def battle(puff1: Puff, puff2: Puff):
         SafeDmg= attack * puff1.defensePenetration# Dmg safe from normal def
         DefendableDmg = (attack-SafeDmg)*(1-(puff2.defense*.01))
         attack = SafeDmg + DefendableDmg - puff2.trueDefense
+        for type in puff1.types:
+            try:
+                typeBuff += effectivenessChart[type.type][puff2.types[0].type]
+                typeBuff += effectivenessChart[type.type][puff2.types[1].type]
+            except: continue
         puff2.health -= attack
         # Opponent's puff attacks next
-        attack = 0 # Resets for next calculationn
+        attack = 0 # Resets for next calculation
+        typeBuff = 0
         if chance <= puff2.critChance:
             attack = puff2.attack * (puff2.critDmg*.10 + 1)
         else:
@@ -219,6 +277,11 @@ def battle(puff1: Puff, puff2: Puff):
         SafeDmg= attack * puff2.defensePenetration
         DefendableDmg = (attack-SafeDmg)*(1-(puff1.defense*.01))
         attack = SafeDmg + DefendableDmg - puff1.trueDefense
+        for type in puff1.types:
+            try:
+                typeBuff += effectivenessChart[type.type][puff2.types[0].type]
+                typeBuff += effectivenessChart[type.type][puff2.types[1].type]
+            except: continue
         puff1.health -= attack
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")

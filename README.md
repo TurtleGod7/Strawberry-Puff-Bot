@@ -93,7 +93,8 @@ Strawberry-Puff-Bot/
 │   │   ├── puffs.db # DB for puffs
 │   │   └── users.db # DB for user data
 │   ├── profile/ # Where banners are stored
-│   └── puffs/ # Where puff .pngs are stored
+│   ├── puffs/ # Where puff .pngs are stored
+│   └── tables/
 ├── src/
 │   ├── main.py # Main script
 │   └── helpers/
