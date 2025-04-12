@@ -878,7 +878,7 @@ class InformationView(discord.ui.View):
             {
                 "title" : "Types and Type Effectiveness",
                 "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
-                "image" : str(flags.IMAGE_PATH) + "tables/typechart.svg"
+                "image" : flags.IMAGE_PATH + "tables/typechart.png"
             },
             {
                 "title": "Stat Scaling",
@@ -1661,7 +1661,12 @@ async def get(ctx, *, arg: ToLowerConverter):
         embed.set_footer(text=f"Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
         return
-
+    if str(arg).endswith(".png"):
+        embed = discord.Embed(title="Table Time", color=discord.Color.dark_theme())
+        embed.set_image(url=flags.IMAGE_PATH + f"tables/{str(arg)}?=raw")
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+        await ctx.send(embed=embed)
+        return
     file = str(arg) + ".png"
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
