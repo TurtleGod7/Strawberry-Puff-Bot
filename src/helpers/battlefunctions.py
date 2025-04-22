@@ -1,5 +1,5 @@
 from typing import Sequence
-from helpers.flags import DEBUG
+from helpers.flags import DEBUG, MONEY_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
 from random import randint
@@ -13,17 +13,23 @@ effectivenessChart = {
     "Tank": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": 0, "Tank": 0}
 }
 
-def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
+foodChart: dict[str, list[list[int]]] = {
+    "Crit Snack" : [[2], [10]],
+    "Turtle Potion" : [[1,4], [5,7]],
+    "King Puff's Shield" : [[2,4,6], [-5, 15, 10]],
+    "Stelle's Bat" : [[0,3], [10, 7]],
+}
+def unpack_info(rollInfo: str) -> dict[str, int]:
     """
-    The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
+    The function `unpack_info` takes a string input containing key-value pairs separated by
     semicolons, splits the string into individual pairs, extracts the keys and values, and returns a
     dictionary sorted by keys.
 
-    :param rollInfo: The `unpack_rolled_info` function takes a string `rollInfo` as input, which
+    :param rollInfo: The `unpack_info` function takes a string `rollInfo` as input, which
     contains information about rolled items separated by semicolons. Each item is in the format
     "item_frequency", where "item" is the name of the item and "frequency" is the number of times it
     :type rollInfo: str
-    :return: The function `unpack_rolled_info` is returning a dictionary containing the frequency of
+    :return: The function `unpack_info` is returning a dictionary containing the frequency of
     each item in the input `rollInfo` string. The items in the dictionary are sorted alphabetically by
     key.
     """
@@ -40,8 +46,6 @@ def unpack_rolled_info(rollInfo: str) -> dict[str, int]:
 
     return dict(sorted(frequency.items()))
 
-# The class `Puff` represents a character with attributes such as name, attack, health, owner, and
-# level, with a method to level up the character.
 class DamageType():
     def __init__(self, type: str) -> None:
         self.type = type
@@ -91,7 +95,7 @@ class Puff:
         self.trueDefense = data[6]
         self.types = types
 
-def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
+def get_puffs_for_battle(puff_names, user_id, buffs) -> list[Puff]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
@@ -131,10 +135,11 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
     normalRolls = data[1] if data and data[1] else ""
     packedStats = goldRolls + ";" + normalRolls if goldRolls or normalRolls else ""
     if packedStats == "": packedStats = None
-    unpackedStats = unpack_rolled_info(packedStats) # type: ignore
+    unpackedStats = unpack_info(packedStats) # type: ignore
 
     for puff in range(len(puff_data)):
         data = list(map(int,puff_data[puff][0].split(";")))
+        # 0: Attack, 1: Health, 2: Crit Chance, 3: Crit Dmg, 4: Defense, 5: Defense Penetration, 6: True Defense
         if DEBUG:
             print(f"Unpacked stats: {data}")
         # If user_id is provided, get the user's level for the puff
@@ -148,6 +153,13 @@ def get_puffs_for_battle(puff_names, user_id) -> list[Puff]:
         data[0] += level # Attack
         data[1] += level * 2 # health
         data[4] += round_int(.25*level**1.75) # Defense
+
+        buffs_to_be_applied = buffs.get(puff_names[puff], "").split("|")
+        for buff in buffs_to_be_applied:
+            if DEBUG: print(f"Buff: {buff}"); print(foodChart.get(buff, []))
+            if buff == "": continue
+            for stat in range(len(foodChart.get(buff, [])[0])):
+                data[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
 
         types = puff_data[puff][1].split(";")
         typeList = []
@@ -183,7 +195,7 @@ def get_lineup(user_id):
     conn.close()
     return data.split(";") if data else []
 
-def save_lineup(lineup, user_id):
+def save_lineup(lineup, user_id) -> None:
     """
     The `save_lineup` function saves a lineup for a user in a database, formatting the lineup and
     updating the database with the user's ID.
@@ -206,7 +218,7 @@ def save_lineup(lineup, user_id):
     cursor.close()
     conn.close()
 
-def get_owned(user_id):
+def get_owned(user_id) -> dict[str, int]:
     """
     This Python function retrieves owned stats for a specific user from a database and returns the
     unpacked rolled information.
@@ -214,7 +226,7 @@ def get_owned(user_id):
     :param user_id: The get_owned function retrieves the rolled golds and normals stats for a specific
     user from a database. The user_id parameter is used to specify the username for which the stats are being retrieved
     :return: The function get_owned is returning a dictionary with the result of calling the
-    function unpack_rolled_info with the argument packedStats
+    function unpack_info with the argument packedStats
     """
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
@@ -227,9 +239,9 @@ def get_owned(user_id):
     if packedStats == "": packedStats = None
     cursor.close()
     conn.close()
-    return unpack_rolled_info(packedStats) # type: ignore
+    return unpack_info(packedStats) # type: ignore
 
-def battle(puff1: Puff, puff2: Puff):
+def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
     """
     This Python function simulates a battle between two Puff objects by reducing their health based on
     their attack values until one of them wins or it's a draw.
@@ -292,3 +304,15 @@ def battle(puff1: Puff, puff2: Puff):
         if puff1.health <= 0:
             return f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1
     return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0 # Catch all
+
+def finalize_battle(winner: int, loser: int):
+    conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
+    cursor = conn.cursor()
+
+    cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(winner,), (loser,)])
+    cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (winner,))
+    cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (loser,))
+    cursor.execute("UPDATE stats SET money = money + " + str(MONEY_FROM_WIN) + " WHERE username = ?", (winner,))
+    conn.commit()
+    cursor.close()
+    conn.close()

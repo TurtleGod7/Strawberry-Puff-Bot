@@ -63,4 +63,5 @@ STATUSES = [
     )
 ]
 COOLDOWN_TIME = 30  # Cooldown in seconds
+MONEY_FROM_WIN = 5
 ###

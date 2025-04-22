@@ -107,20 +107,20 @@ async def dm_ping(user_id: int, message: str):
     except discord.HTTPException as e:
         print(f'Error sending DM as {e}')
 
-def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
+def unpack_info(rollInfo: str, returndictempty: bool=False, checkint: bool=True):
     """
-    The function `unpack_rolled_info` takes a string input containing key-value pairs separated by
+    The function `unpack_info` takes a string input containing key-value pairs separated by
     semicolons, extracts the keys and values, and returns a dictionary sorted by keys.
 
     :param rollInfo: The `rollInfo` parameter is a string that contains information about rolled items
     and their frequencies. Each item and its frequency are separated by an underscore, and each item is
     separated by a semicolon
     :type rollInfo: str
-    :param returndictempty: The `returndictempty` parameter in the `unpack_rolled_info` function is a
+    :param returndictempty: The `returndictempty` parameter in the `unpack_info` function is a
     boolean parameter with a default value of `False`. If this parameter is set to `True`, the function
     will return an empty dictionary `{}` if the `rollInfo` input is `None`. This, defaults to False
     :type returndictempty: bool (optional)
-    :return: The function `unpack_rolled_info` is returning a dictionary containing the frequency of
+    :return: The function `unpack_info` is returning a dictionary containing the frequency of
     each item in the input `rollInfo` string. The items in the dictionary are sorted alphabetically by
     key. If the `returndictempty` parameter is set to `True` and `rollInfo` is `None`, an empty
     dictionary is returned. If `rollInfo` is `None` without
@@ -133,20 +133,22 @@ def unpack_rolled_info(rollInfo: str, returndictempty: bool=False):
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
-        try: frequency[split.split("_")[0]] = int(split.split("_")[1])
+        try: 
+            if checkint: frequency[split.split("_")[0]] = int(split.split("_")[1])
+            else: frequency[split.split("_")[0]] = split.split("_")[1]
         except: continue
     return dict(sorted(frequency.items()))
 
-def pack_rolled_info(frequency_dict: dict):
+def pack_info(frequency_dict: dict):
     """
-    The function `pack_rolled_info` takes a dictionary `frequency_dict` as input and returns a string
+    The function `pack_info` takes a dictionary `frequency_dict` as input and returns a string
     representation of the key-value pairs in the dictionary separated by semicolons.
 
     :param frequency_dict: The `frequency_dict` parameter is a dictionary that contains the frequency of
     rolled items. Each key in the dictionary represents an item, and the corresponding value represents
     the frequency of that item being rolled
     :type frequency_dict: dict
-    :return: The function `pack_rolled_info` returns a string that contains key-value pairs from the
+    :return: The function `pack_info` returns a string that contains key-value pairs from the
     input `frequency_dict` dictionary, separated by semicolons. Each key-value pair is formatted as
     `key_value`. If the input `frequency_dict` is `None`, the function returns `None`. If the resulting
     string is empty, the function also returns `None`.
@@ -511,14 +513,14 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
 
-    table = unpack_rolled_info(rolledGolds, True) if isRareval >= 2 else unpack_rolled_info(rolledNormals, True)
+    table = unpack_info(rolledGolds, True) if isRareval >= 2 else unpack_info(rolledNormals, True)
     table_name = "rolledGolds" if isRareval >= 2 else "rolledNormals"
     ascension = table.get(name, -1)
     if ascension < flags.ASCENSION_MAX:
         table[name] = ascension+1
     table = dict(sorted(table.items()))
 
-    cursor.execute("UPDATE stats SET rolls = rolls + 1, pity = pity + 1, " + table_name + " = ? WHERE username = ?", (pack_rolled_info(table), user_id,))
+    cursor.execute("UPDATE stats SET rolls = rolls + 1, pity = pity + 1, " + table_name + " = ? WHERE username = ?", (pack_info(table), user_id,))
     if int(isRare) >= 2:
         stat_column = "limited" if isRare > 2 else "gold"
         cursor.execute("SELECT avgPity FROM stats WHERE username = ?", (user_id,))
@@ -716,7 +718,7 @@ async def drop_rates(interaction: discord.Interaction):
     view = DropRatesView(items, total_weight0, total_weight1, total_weight2, total_weight3)
     await interaction.response.send_message(embed=view.generate_embed(), view=view)
 
-@bot.tree.command(name="suggestions", description="Suggest new ideas for our bot!")
+@bot.tree.command(name="report", description="Suggest new ideas for our bot!")
 @discord.app_commands.check(is_banned_user)
 async def suggestions(interaction: discord.Interaction):
     """
@@ -728,8 +730,10 @@ async def suggestions(interaction: discord.Interaction):
     bot to respond to user input or commands in a Discord server
     :type interaction: discord.Interaction
     """
-    embed = discord.Embed(title="Please direct your help here", color=discord.Color.fuchsia())
+    embed = discord.Embed(title="Please direct your feedback here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
+    embed.add_field(name="Please direct any bugs to this google form", value="*https://jumpy-parsley-d39.notion.site/1d345bd163d880008cf5e48ce506eb50?pvs=105*")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
@@ -801,6 +805,10 @@ async def docs(interaction: discord.Interaction):
     embed.add_field(
         name="/preview",
         value="View any puff in the game and its stats"
+    )
+    embed.add_field(
+        name="/shop",
+        value="Use this function to view the shop and buy items"
     )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
 
@@ -877,17 +885,17 @@ class InformationView(discord.ui.View):
                                 "These stats are important for determining how well your puffs perform in battles against other players."
             },
             {
-                "title" : "Types and Type Effectiveness",
-                "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
-                "image" : flags.IMAGE_PATH + "tables/typechartwhite.png"
-            },
-            {
                 "title": "Stat Scaling",
                 "description": "This is the scaling of the stats for the puffs (These are additive to the base amount and x is the level). The scaling is as follows:\n"
                                 "Attack: 1x\n"
                                 "Health: 2x\n"
                                 "Defense: .25x^1.75 (rounded)\n"
-            }
+            },
+            {
+                "title" : "Types and Type Effectiveness",
+                "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
+                "image" : flags.IMAGE_PATH + "tables/typechartwhite.png"
+            },
         ]
         self.page = 0
         self.items_per_page = flags.ITEMS_PER_PAGE
@@ -1096,8 +1104,8 @@ async def comparision(interaction: discord.Interaction, user: discord.Member):
         return
 
     # unpacking information
-    clientFrequency = unpack_rolled_info(clientRolled, True)
-    targetFrequency = unpack_rolled_info(targetRolled, True)
+    clientFrequency = unpack_info(clientRolled, True)
+    targetFrequency = unpack_info(targetRolled, True)
 
     diffRolls = targetRolls-clientRolls# Doing differences calculations
     diffLimited = clientLimited-targetLimited
@@ -1204,6 +1212,12 @@ class LineupSetupButtons(discord.ui.View):
         user_puffs = battlefunctions.get_owned(interaction.user.id)
         await interaction.response.edit_message(view=PuffDropdown(user_puffs))
         # Trigger dropdown function
+
+    @discord.ui.button(label="🍔 Feed Puffs", style=discord.ButtonStyle.secondary)
+    async def buff_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_puffs = battlefunctions.get_owned(interaction.user.id)
+        await interaction.response.edit_message(view=FeedPuffDropdown(user_puffs, interaction.user.id))
+        # Trigger feed puff function
 
 class PuffDropdown(discord.ui.View):
     '''
@@ -1318,6 +1332,112 @@ class RearrangeDropdown(discord.ui.View):
 
         position_select.callback = position_callback
 
+class FeedPuffDropdown(discord.ui.View):
+    '''
+    The `FeedPuffDropdown` class in Python creates a dropdown menu for selecting food, then prompts the user to pick a puff to feed, and applies the food effect.
+    '''
+    def __init__(self, puff_list: dict, user_id: int):
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        self.puff_list = puff_list
+        self.user_id = user_id
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT food FROM items WHERE username = ?", (self.user_id,))
+        self.food = unpack_info(cursor.fetchone()[0], True)
+        cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (self.user_id,))
+        self.applied_food = unpack_info(cursor.fetchone()[0], True, False)
+        cursor.close()
+        conn.close()
+
+        # Create dropdown for food selection
+        if not self.food:
+            options = [discord.SelectOption(label="No food available", value="none")]
+            self.select = discord.ui.Select(
+                placeholder="No food available",
+                options=options,
+                disabled=True
+            )
+        else:
+            options = [
+                discord.SelectOption(label=f"{food} x{amount}", value=food) for food, amount in self.food.items()
+            ]
+            self.select = discord.ui.Select(
+                placeholder="Choose your food to feed a puff!",
+                options=options,
+                min_values=1,
+                max_values=1
+            )
+
+        self.select.callback = self.select_food_callback
+        self.add_item(self.select)
+
+    async def select_food_callback(self, interaction: discord.Interaction):
+        if self.select.values[0] == "none":
+            await interaction.response.send_message("You don't have any food to select.", ephemeral=True)
+            return
+
+        selected_food = self.select.values[0]
+
+        # Now prompt for puff selection
+        if not self.puff_list:
+            await interaction.response.send_message("You don't have any puffs to feed.", ephemeral=True)
+            return
+
+        filtered_dict = {}
+        for puff in self.puff_list.items():
+            if selected_food not in self.applied_food.get(puff[0], "").split("|"):
+                filtered_dict[puff[0]] = puff[1]
+        if flags.DEBUG: print(filtered_dict)
+
+        puff_options = [
+            discord.SelectOption(label=f"{puff} (Lvl {level})", value=puff) for puff, level in filtered_dict.items()
+        ]
+        puff_select = discord.ui.Select(
+            placeholder="Select a puff to feed",
+            options=puff_options,
+            min_values=1,
+            max_values=1
+        )
+
+        async def puff_callback(interaction: discord.Interaction):
+            selected_puff = puff_select.values[0]
+            # Apply the food effect to the puff (implement your logic here)
+            # For example, call a function: battlefunctions.feed_puff(selected_puff, selected_food, self.user_id)
+            # Remove one food from inventory
+            conn = get_db_connection("assets/database/users.db")
+            cursor = conn.cursor()
+            self.food[selected_food] -= 1
+            if self.food[selected_food] == 0:
+                del self.food[selected_food]
+            cursor.execute("UPDATE items SET food = ? WHERE username = ?", (pack_info(self.food), self.user_id))
+            # in the format of name: food|food|food
+            self.applied_food.get(selected_puff)
+            if self.applied_food.get(selected_puff) is None: self.applied_food[selected_puff] = selected_food + "|"
+            else: self.applied_food[selected_puff] += selected_food + "|"
+            cursor.execute("UPDATE pvp_lineup SET food = ? WHERE username = ?", (pack_info(self.applied_food), self.user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            feed_again_button = discord.ui.Button(label="🔁 Feed your puffs again", style=discord.ButtonStyle.primary)
+
+            async def feed_again_callback(interaction: discord.Interaction):
+                await interaction.response.edit_message(content="🔁 Let's feed more puffs!", view=FeedPuffDropdown(self.puff_list, self.user_id))
+
+            feed_again_button.callback = feed_again_callback
+
+            button_view = discord.ui.View()
+            button_view.add_item(feed_again_button)
+
+            await interaction.response.edit_message(
+                content=f"✅ {selected_puff} has been fed {selected_food}!",
+                view=button_view
+            )
+        puff_view = discord.ui.View()
+        puff_view.add_item(puff_select)
+        puff_select.callback = puff_callback
+        await interaction.response.edit_message(content=f"🍽️ You picked **{selected_food}**. Now select a puff to feed:", view=puff_view)
+
 @bot.tree.command(name="setup_lineup", description="Set or rearrange your lineup!")
 @discord.app_commands.check(is_banned_user)
 async def setup_lineup(interaction: discord.Interaction):
@@ -1374,6 +1494,85 @@ class BattleConfirmView(discord.ui.View):
         if self.result is None:
             self.stop()
 
+class NPCBattling(discord.ui.View):
+    def __init__(self, user, lineup):
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        self.user = user
+        self.lineup = lineup
+
+    def calculate_user_power(self):
+        """
+        Calculate the total power of the user's lineup based on their puffs' stats.
+        """
+        total_power = 0
+        for puff in battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {}):
+            total_power += puff.attack + puff.health + puff.critChance + puff.critDmg + puff.defense + puff.defensePenetration + puff.trueDefense
+        return total_power
+
+    def generate_npc_lineup(self, user_power, difficulty):
+        """
+        Generate an NPC lineup based on the user's power and the selected difficulty.
+        """
+        difficulty_multiplier = {
+            "easy": 0.5,
+            "medium": 1.0,
+            "hard": 1.5
+        }
+        npc_power = user_power * difficulty_multiplier[difficulty]
+        npc_lineup = []#battlefunctions.generate_npc_lineup(npc_power, difficulty)
+        return npc_lineup
+
+    async def generate_embed(self, interaction: discord.Interaction, difficulty: str):
+        """
+        Generate an embed showing the NPC lineup and initiate the battle.
+        """
+        await interaction.response.defer()
+
+        user_power = self.calculate_user_power()
+        npc_lineup = self.generate_npc_lineup(user_power, difficulty)
+
+        embed = discord.Embed(
+            title=f"Battle against NPC ({difficulty.capitalize()} Difficulty)",
+            description="The battle is about to begin!",
+            color=discord.Color.dark_orange()
+        )
+        embed.add_field(name="Your Lineup", value=", ".join(self.lineup), inline=False)
+        embed.add_field(name="NPC Lineup", value=", ".join([puff.name for puff in npc_lineup]), inline=False)
+        embed.set_footer(text=f"Requested by {self.user.display_name}")
+
+        # Simulate the battle
+        results = []
+        scores = []
+        for u_puff, o_puff in zip(battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {}), npc_lineup):
+            try:
+                result_battle, score = battlefunctions.battle(u_puff, o_puff)
+                results.append(result_battle)
+                scores.append(score)
+            except AttributeError:
+                results.append("The program broke here, please notify the developer")
+                scores.append(0)
+
+        overall_score = round_int(mean(scores))
+        winner = self.user.display_name if overall_score > 0 else "NPC"
+        result_message = "\n".join(results)
+
+        embed.add_field(name="Battle Results", value=result_message, inline=False)
+        embed.add_field(name="Winner", value=winner, inline=False)
+
+        await interaction.response.edit_message(embed=embed)
+
+    @discord.ui.button(label="Easy", style=discord.ButtonStyle.success)
+    async def easy(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_embed(interaction, "easy")
+
+    @discord.ui.button(label="Medium", style=discord.ButtonStyle.primary)
+    async def medium(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_embed(interaction, "medium")
+
+    @discord.ui.button(label="Hard", style=discord.ButtonStyle.danger)
+    async def hard(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_embed(interaction, "hard")
+
 @bot.tree.command(name="battle", description="Battle another user!")
 @discord.app_commands.check(is_banned_user)
 async def battle_command(interaction: discord.Interaction, opponent: discord.Member):
@@ -1397,7 +1596,6 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     """
     user_id = interaction.user.id
     opponent_id = opponent.id
-    global COOLDOWN_TIME # Do not set any values = to this
 
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
@@ -1410,13 +1608,13 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     # Check if the user is on cooldown by querying the database
     cursor.execute("SELECT battle FROM cooldowns WHERE username = ?", (user_id,))
     result = cursor.fetchone()
-
+    cursor.close()
+    conn.close()
     if result:
         last_used = result[0]
         if current_time - last_used < flags.COOLDOWN_TIME:
             remaining_time = flags.COOLDOWN_TIME - (current_time - last_used)
             await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
-            conn.close()
             return
 
     # Then checks if they're battling themselves
@@ -1430,6 +1628,9 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     if not user_lineup or not opponent_lineup:
         await interaction.response.send_message(content="⚔️ Both users need a saved lineup!", ephemeral=True)
         return
+
+    if opponent.id == 1338650603617910817: # Checks if it's the bot
+        await interaction.response.send_message("Wow, so you found this placeholder for a cool feature the dev is making, very cool!", ephemeral=True)
 
     view = BattleConfirmView(interaction.user, opponent)
     await interaction.response.send_message(
@@ -1450,15 +1651,22 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
 
     current_time = time() # Updated here to be more accurate
     # If user is not on cooldown, update their cooldown time
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
     cursor.execute("REPLACE INTO cooldowns (username, battle) VALUES (?, ?)", (user_id, current_time))
 
+    # Retrieve food data for both users
+    cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (user_id,))
+    user_food = unpack_info(cursor.fetchone()[0], True, False)
+    cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (opponent_id,))
+    opponent_food = unpack_info(cursor.fetchone()[0], True, False)
     conn.commit()
     cursor.close()
     conn.close()
 
     # Convert names to Puff objects
-    user_puffs = battlefunctions.get_puffs_for_battle(user_lineup, user_id)
-    opponent_puffs = battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id)
+    user_puffs = battlefunctions.get_puffs_for_battle(user_lineup, user_id, user_food)
+    opponent_puffs = battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id, opponent_food)
 
     results = []
     scores = []
@@ -1477,20 +1685,10 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     elif overall_score == 0:
         winner = ""
 
-    conn = get_db_connection("assets/database/users.db")
-    cursor = conn.cursor()
-
-    cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(user_id,), (opponent_id,)])
     if overall_score > 0:
-        cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (user_id,))
-        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (opponent_id,))
+        battlefunctions.finalize_battle(user_id, opponent_id)
     elif overall_score < 0:
-        cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (opponent_id,))
-        cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (user_id,))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+        battlefunctions.finalize_battle(opponent_id, user_id)
 
     result_message = "\n".join(results)
     embed = discord.Embed(title=f"Puff Battle Results - {winner if winner != '' else '**⚔️ DRAW**'}", description=result_message, color=color)
@@ -1520,7 +1718,14 @@ class LineupView(discord.ui.View):
             self.puff_names = sorted(self.owned_puffs.keys(), key=lambda name: self.owned_puffs[name], reverse=self.level_order)
         else:
             self.puff_names = sorted(self.owned_puffs.keys(), reverse=self.level_order)
-        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id)
+            
+                                                                                                                                ##
+                                                                                                                                ##
+                                                                                                                                ##
+                                                                                                                           ###  ##  ###
+                                                                                                                             ########
+                                                                                                                                ##
+        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id, {})
         self.lineup_puffs = battlefunctions.get_lineup(self.user_id)
         ownedPuffsmessage = "\n".join(
             f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}% Defense: {puff.defense}% Defense Penetration: {puff.defensePenetration}% True Defense: {puff.trueDefense}\n   * Types: {puff.types[0].damageType()}" + (f' / {puff.types[1].damageType()}' if len(puff.types) > 1 else '')
@@ -1589,7 +1794,7 @@ async def get_lineup(interaction: discord.Interaction, visible: bool=False):
     view = LineupView(user_id, interaction.user.display_name)
     await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=not visible)
 
-async def item_autocomplete(interaction: discord.Interaction, current: str):
+async def puff_name_autocomplete(interaction: discord.Interaction, current: str):
     """
     The function `item_autocomplete` suggests items that match what the user types based on a list of
     items called `puff_list`.
@@ -1622,7 +1827,7 @@ async def item_autocomplete(interaction: discord.Interaction, current: str):
 
 @bot.tree.command(name="preview", description="Preview a puff")
 @discord.app_commands.describe(puff="A puff to preview")
-@discord.app_commands.autocomplete(puff=item_autocomplete)
+@discord.app_commands.autocomplete(puff=puff_name_autocomplete)
 @discord.app_commands.check(is_banned_user)
 async def preview(interaction: discord.Interaction, puff: str):
     """
@@ -1659,6 +1864,155 @@ async def preview(interaction: discord.Interaction, puff: str):
     embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}", inline=False)
     embed.set_image(url=flags.IMAGE_PATH + f"puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
+
+class ShopView(discord.ui.View):
+    '''
+    The `ShopView` class in Python creates a Discord UI view for a shop, allowing users to purchase items
+    and providing buttons for item selection and confirmation.
+    '''
+    def __init__(self, user_id):
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        self.user_id = user_id
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (self.user_id,))
+        cursor.execute("INSERT OR IGNORE INTO items (username) VALUES (?)", (self.user_id,))
+        conn.commit()
+        # Fetch user's money from the database
+        cursor.execute("SELECT money FROM stats WHERE username = ?", (self.user_id,))
+        self.money = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        self.items = {"Crit Snack": 10, "Turtle Potion": 15, "King Puff's Shield": 30, "Stelle's Bat": 10}
+        self.bought_items = {}
+        self.button_color = {True: discord.ButtonStyle.success, False: discord.ButtonStyle.danger}
+
+    def can_afford(self, item: str, returnbool=False) -> discord.ButtonStyle:
+        """
+        Check if the user can afford the selected item based on their available money.
+        """
+        if returnbool: return self.money >= self.items[item]
+        return self.button_color[self.money >= self.items[item]]
+
+    def generate_embed(self):
+        embed = discord.Embed(title="Shop", color=discord.Color.blue())
+        embed.add_field(name="Money", value=f"{self.money} clouds")
+        embed.add_field(name="Items", value="\n".join(f"{item}: {price} clouds" for item, price in self.items.items()), inline=False)
+        embed.add_field(name="Purchased Items", value="\n".join(f"{amount} {item}(s)" for item, amount in self.bought_items.items()), inline=False)
+        embed.set_footer(text="Select an item to purchase | Items won't save until 60 seconds of no activity")
+        return embed
+
+    @discord.ui.button(label="Crit Snack",style=discord.ButtonStyle.primary,)
+    async def crit_snack(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Dynamically update the button color based on can_afford
+        button.style = self.can_afford("Crit Snack")
+        label = button.label if button.label is not None else "Crit Snack"
+        if not self.can_afford(label, True):
+            await interaction.response.send_message("You can't afford this item!", ephemeral=True)
+            return
+        self.money -= self.items.get(label, 10)
+        if self.bought_items.get(label) is None:
+            self.bought_items[label] = 1
+        else:
+            self.bought_items[label] += 1
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="Turtle Potion",style=discord.ButtonStyle.primary,)
+    async def turtle_potion(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Dynamically update the button color based on can_afford
+        button.style = self.can_afford("Turtle Potion")
+        label = button.label if button.label is not None else "Turtle Potion"
+        if not self.can_afford(label, True):
+            await interaction.response.send_message("You can't afford this item!", ephemeral=True)
+            return
+        self.money -= self.items.get(label, 15)
+        if self.bought_items.get(label) is None:
+            self.bought_items[label] = 1
+        else:
+            self.bought_items[label] += 1
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="King Puff's Shield",style=discord.ButtonStyle.primary,)
+    async def king_puff_shield(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Dynamically update the button color based on can_afford
+        button.style = self.can_afford("King Puff's Shield")
+        label = button.label if button.label is not None else "King Puff's Shield"
+        if not self.can_afford(label, True):
+            await interaction.response.send_message("You can't afford this item!", ephemeral=True)
+            return
+        self.money -= self.items.get(label, 30)
+        if self.bought_items.get(label) is None:
+            self.bought_items[label] = 1
+        else:
+            self.bought_items[label] += 1
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="Stelle's Bat",style=discord.ButtonStyle.primary,)
+    async def stelle_bat(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Dynamically update the button color based on can_afford
+        button.style = self.can_afford("Stelle's Bat")
+        label = button.label if button.label is not None else "Stelle's Bat"
+        if not self.can_afford(label, True):
+            await interaction.response.send_message("You can't afford this item!", ephemeral=True)
+            return
+        self.money -= self.items.get(label, 10)
+        if self.bought_items.get(label) is None:
+            self.bought_items[label] = 1
+        else:
+            self.bought_items[label] += 1
+        await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="Item Info", style=discord.ButtonStyle.secondary,)
+    async def item_info(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """
+        Show item info when the button is clicked.
+        """
+        embed = discord.Embed(title="Item Info", color=discord.Color.blue())
+        embed.add_field(name="Crit Snack", value="A snack that boosts crit chance by 10%.")
+        embed.add_field(name="Turtle Potion", value="A potion that increases health by 5 hit points and defense by 7%.")
+        embed.add_field(name="King Puff's Shield", value="A shield that increases defense by 15% and true defense by 10 at the cost of 5% crit chance.")
+        embed.add_field(name="Stelle's Bat", value="A bat gifted by Stelle that increases attack by 10% and crit damage by 7%.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def on_timeout(self):
+        """
+        On timeout, update the user's money and purchased items into the database.
+        """
+        if flags.DEBUG:
+            print("Debug: ShopView timed out")
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        # Update user's money
+        cursor.execute("UPDATE stats SET money = ? WHERE username = ?", (self.money, self.user_id))
+        cursor.execute("SELECT food FROM items WHERE username = ?", (self.user_id,))
+        current_items = unpack_info(cursor.fetchone()[0], True)
+        # Update purchased items in the database
+        for item, amount in self.bought_items.items():
+            if item in current_items:
+                current_items[item] += amount
+            else:
+                current_items[item] = amount
+        cursor.execute("UPDATE items SET food = ? WHERE username = ?", (pack_info(current_items), self.user_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        self.stop()
+
+@bot.tree.command(name="shop", description="A closed marketplace for you to buy items")
+@discord.app_commands.check(is_banned_user)
+async def shop(interaction: discord.Interaction):
+    """
+    This Python function creates a shop interface in a Discord bot, allowing users to purchase items
+    using their in-game currency.
+
+    :param interaction: The `interaction` parameter in the `shop` function represents the interaction
+    between the user and the Discord bot. It contains information about the user who triggered the
+    command, the channel where the interaction occurred, and other relevant details needed to process
+    the command and respond to the user
+    :type interaction: discord.Interaction
+    """
+    view = ShopView(interaction.user.id)
+    await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=True)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
 
@@ -2052,6 +2406,11 @@ async def checkMessage(message: discord.Message):
         await message.add_reaction("<:skater:1345246453911781437>")
     if "demon puff" in message.content.lower():
         await message.add_reaction("<:demon:1359667344552497344>")
+    if "hi " in message.content.lower() and message.author.id in ADMIN_USERS:
+        await message.reply(f"Hi Admin {message.author.display_name}! How may I serve you today?\n||-# Please don't send me back to the mines :sob:||")
+    elif "hi " in message.content.lower() and message.author.id != bot.user.id: # type: ignore
+        await message.reply("Hi there!")
+        await message.add_reaction("👋")
 
     return
 
