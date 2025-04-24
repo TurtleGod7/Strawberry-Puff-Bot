@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, final
 from helpers.flags import DEBUG, MONEY_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
@@ -84,18 +84,30 @@ typeChart = {
 class Puff:
     def __init__(self, name: str, data: Sequence[int|float], owner: int, types: list[DamageType], level=0):
         self.name = name
-        self.attack = data[0]
-        self.health = data[1]
         self.level = level
         self.owner = owner
+        self.types = types
+        self.attack = data[0]
+        self.health = data[1]
         self.critChance = data[2]
         self.critDmg = data[3]
         self.defense = data[4]
         self.defensePenetration = data[5]
         self.trueDefense = data[6]
-        self.types = types
 
-def get_puffs_for_battle(puff_names, user_id, buffs) -> list[Puff]:
+class LineupPuff(Puff):
+    def __init__(self, name: str, data: Sequence[int|float], databuff: list[int], owner: int, types: list[DamageType], level=0):
+        super().__init__(name, data, owner, types, level)
+        self.attackbuff = f"{databuff[0]:+}"
+        self.healthbuff = f"{databuff[1]:+}"
+        self.critChancebuff = f"{databuff[2]:+}"
+        self.critDmgbuff = f"{databuff[3]:+}"
+        self.defensebuff = f"{databuff[4]:+}"
+        self.defensePenetrationbuff = f"{databuff[5]:+}"
+        self.trueDefensebuff = f"{databuff[6]:+}"
+
+
+def get_puffs_for_battle(puff_names, user_id, buffs, forlineupfunc: bool=False) -> Sequence[Puff|LineupPuff]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
@@ -148,6 +160,7 @@ def get_puffs_for_battle(puff_names, user_id, buffs) -> list[Puff]:
         if level == -1:
             print(f"Error: {puff_names[puff]} not found in unpackedStats")
             continue
+        databuff = [0] * 7
 
         # Scale stats based on level
         data[0] += level # Attack
@@ -159,7 +172,8 @@ def get_puffs_for_battle(puff_names, user_id, buffs) -> list[Puff]:
             if DEBUG: print(f"Buff: {buff}"); print(foodChart.get(buff, []))
             if buff == "": continue
             for stat in range(len(foodChart.get(buff, [])[0])):
-                data[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
+                if forlineupfunc: databuff[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
+                else: data[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
 
         types = puff_data[puff][1].split(";")
         typeList = []
@@ -168,9 +182,14 @@ def get_puffs_for_battle(puff_names, user_id, buffs) -> list[Puff]:
             try: typeList.append(typeChart[type]())
             except: continue
         if DEBUG: print(f"Final Types: {typeList}")
-        final_data.append(
-            Puff(puff_names[puff],data,user_id, typeList, level)
-        )
+        if forlineupfunc:
+            final_data.append(
+                LineupPuff(puff_names[puff],data,databuff,user_id, typeList, level)
+            )
+        else:
+            final_data.append(
+                Puff(puff_names[puff],data,user_id, typeList, level)
+            )
 
     return final_data
 

@@ -1,3 +1,4 @@
+from calendar import c
 from os import getenv, path
 from sys import platform
 from random import choices
@@ -1708,6 +1709,12 @@ class LineupView(discord.ui.View):
         self.user_id = user_id
         self.display_name = display_name
         self.owned_puffs = battlefunctions.get_owned(self.user_id)
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (user_id,))
+        self.food = unpack_info(cursor.fetchone()[0], True, False)
+        cursor.close()
+        conn.close()
         self.sort_by_level = True  # Default sorting is by level
         self.level_order = True
         self.page = 0
@@ -1718,17 +1725,19 @@ class LineupView(discord.ui.View):
             self.puff_names = sorted(self.owned_puffs.keys(), key=lambda name: self.owned_puffs[name], reverse=self.level_order)
         else:
             self.puff_names = sorted(self.owned_puffs.keys(), reverse=self.level_order)
-            
-                                                                                                                                ##
-                                                                                                                                ##
-                                                                                                                                ##
-                                                                                                                           ###  ##  ###
-                                                                                                                             ########
-                                                                                                                                ##
-        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id, {})
+
+        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id, self.food, True)
         self.lineup_puffs = battlefunctions.get_lineup(self.user_id)
         ownedPuffsmessage = "\n".join(
-            f"* {puff.name} (Level {puff.level})\n    * Attack: {puff.attack} Health: {puff.health} Crit Chance: {puff.critChance}% Crit Damage: {puff.critDmg}% Defense: {puff.defense}% Defense Penetration: {puff.defensePenetration}% True Defense: {puff.trueDefense}\n   * Types: {puff.types[0].damageType()}" + (f' / {puff.types[1].damageType()}' if len(puff.types) > 1 else '')
+            f"* {puff.name} (Level {puff.level})\n"
+            f"   * Attack: {puff.attack} " + (f'({puff.attackbuff})' if puff.attackbuff != "+0" else '') + '\n' # type: ignore
+            f"   * Health: {puff.health} " + (f'({puff.healthbuff})' if puff.healthbuff != "+0" else '') + '\n' # type: ignore
+            f"   * Crit Chance: {puff.critChance}% " + (f'({puff.critChancebuff}%)' if puff.critChancebuff != "+0" else '') + '\n' # type: ignore
+            f"   * Crit Damage: {puff.critDmg}% " + (f'({puff.critDmgbuff}%)' if puff.critDmgbuff != "+0" else '') + '\n' # type: ignore
+            f"   * Defense: {puff.defense}% " + (f'({puff.defensebuff}%)' if puff.defensebuff != "+0" else '') + '\n' # type: ignore
+            f"   * Defense Penetration: {puff.defensePenetration}% " + (f'({puff.defensePenetrationbuff})' if puff.defensePenetrationbuff != "+0" else '') + '\n' # type: ignore
+            f"   * True Defense: {puff.trueDefense}" + (f'({puff.trueDefensebuff})' if puff.trueDefensebuff != "+0" else '') + '\n' # type: ignore
+            f"   * Types: {puff.types[0].damageType()}" + (f' / {puff.types[1].damageType()}' if len(puff.types) > 1 else '') + '\n' # type: ignore
             for puff in self.puff_stats
         )
         ownedPuffsmessage = shorten_message(ownedPuffsmessage, self.user_id)
