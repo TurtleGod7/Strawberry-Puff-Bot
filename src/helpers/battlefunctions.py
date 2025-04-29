@@ -5,7 +5,7 @@ from os import name as os_name
 from random import randint
 from main import round_int
 
-effectivenessChart = {
+effectivenessChart: dict[str, dict[str, float]] = {
     "Melee": {"Melee": 0, "Ranged": .25, "Magic": -.25, "Support": 0, "Tank": -.25},
     "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": .25},
     "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": 0},
@@ -19,6 +19,7 @@ foodChart: dict[str, list[list[int]]] = {
     "King Puff's Shield" : [[2,4,6], [-5, 15, 10]],
     "Stelle's Bat" : [[0,3], [10, 7]],
 }
+
 def unpack_info(rollInfo: str) -> dict[str, int]:
     """
     The function `unpack_info` takes a string input containing key-value pairs separated by
@@ -107,7 +108,7 @@ class LineupPuff(Puff):
         self.trueDefensebuff = f"{databuff[6]:+}"
 
 
-def get_puffs_for_battle(puff_names, user_id, buffs, forlineupfunc: bool=False) -> Sequence[Puff|LineupPuff]:
+def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, str], forlineupfunc: bool=False) -> tuple[Sequence[Puff|LineupPuff], dict[str, str]]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
@@ -174,7 +175,7 @@ def get_puffs_for_battle(puff_names, user_id, buffs, forlineupfunc: bool=False) 
             for stat in range(len(foodChart.get(buff, [])[0])):
                 if forlineupfunc: databuff[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
                 else: data[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
-
+        if not forlineupfunc: del buffs[puff_names[puff]]
         types = puff_data[puff][1].split(";")
         typeList = []
         if DEBUG: print(f"Original Types: {types}")
@@ -191,9 +192,9 @@ def get_puffs_for_battle(puff_names, user_id, buffs, forlineupfunc: bool=False) 
                 Puff(puff_names[puff],data,user_id, typeList, level)
             )
 
-    return final_data
+    return final_data, buffs
 
-def get_lineup(user_id):
+def get_lineup(user_id: int):
     """
     The function `get_lineup` retrieves a user's PvP lineup from a database and returns it as a list of
     lineup items.
@@ -214,7 +215,7 @@ def get_lineup(user_id):
     conn.close()
     return data.split(";") if data else []
 
-def save_lineup(lineup, user_id) -> None:
+def save_lineup(lineup: list[str], user_id: int) -> None:
     """
     The `save_lineup` function saves a lineup for a user in a database, formatting the lineup and
     updating the database with the user's ID.
@@ -237,7 +238,7 @@ def save_lineup(lineup, user_id) -> None:
     cursor.close()
     conn.close()
 
-def get_owned(user_id) -> dict[str, int]:
+def get_owned(user_id: int) -> dict[str, int]:
     """
     This Python function retrieves owned stats for a specific user from a database and returns the
     unpacked rolled information.
@@ -324,7 +325,7 @@ def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
             return f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1
     return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0 # Catch all
 
-def finalize_battle(winner: int, loser: int):
+def finalize_battle(winner: int, loser: int) -> None:
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
 

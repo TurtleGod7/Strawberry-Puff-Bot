@@ -59,7 +59,7 @@ STATUSES = [
     Activity(
         type=ActivityType.custom,
         name=f"The new banner is for the {BANNER_NAME.lower()}",
-        state="Make sure to check it out before it ends!",
+        state="Make sure to check the new banner out before it ends!",
     )
 ]
 COOLDOWN_TIME = 30  # Cooldown in seconds

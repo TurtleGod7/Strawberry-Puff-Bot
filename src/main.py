@@ -34,7 +34,7 @@ BannedPlayerCtx = errorclasses.BannedPlayerErrorCtx
 ###
 
 ### Global Variables that DON'T need to be changed
-weightsMultipier = {
+weightsMultipier: dict[int, float] = {
     0 : flags.RARITY_WEIGHTS[0],
     1 : flags.RARITY_WEIGHTS[1],
     2 : flags.RARITY_WEIGHTS[2]*flags.LIMITED_WEIGHTS[0],
@@ -42,20 +42,20 @@ weightsMultipier = {
     4 : flags.LIMITED_WEIGHTS[0], # When pity hits 100
     5 : flags.LIMITED_WEIGHTS[1],
 }
-weightedColor = {
+weightedColor: dict[int, discord.Color] = {
     -1: discord.Color.brand_red(),
     0: discord.Color.yellow(),
     1: discord.Color.brand_green(),
 }
-rareColors = {
+rareColors: dict[int, discord.Color] = {
         0 : discord.Color.blue(),
         1 : discord.Color.purple(),
         2 : discord.Color.gold(),
         3 : discord.Color.greyple()
     }
 activity_task_running = False
-puff_list = []#; daemons.PuffRetriever(global_var=puff_list)
-banned_users = {}
+puff_list: list[str] = []#; daemons.PuffRetriever(global_var=puff_list)
+banned_users: dict[int, float] = {}
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 
@@ -70,7 +70,7 @@ class ToLowerConverter(commands.Converter):
     The `ToLowerConverter` class is a custom converter in Python that converts a string argument to
     lowercase. It also checks that the argument isn't a number (integer) to ensure it is a valid string input.
     '''
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx, argument) -> str:
         if not isinstance(argument, str):
             raise commands.BadArgument("Argument must be a string")
         try: int(argument); raise commands.BadArgument("Argument must be a string")
@@ -140,7 +140,7 @@ def unpack_info(rollInfo: str, returndictempty: bool=False, checkint: bool=True)
         except: continue
     return dict(sorted(frequency.items()))
 
-def pack_info(frequency_dict: dict):
+def pack_info(frequency_dict: dict) -> str | None:
     """
     The function `pack_info` takes a dictionary `frequency_dict` as input and returns a string
     representation of the key-value pairs in the dictionary separated by semicolons.
@@ -184,7 +184,7 @@ def is_authorised_user():
         raise NotAdmin("You are not an admin user.")
     return commands.check(predicate)
 
-def is_banned_user(interaction: discord.Interaction):
+def is_banned_user(interaction: discord.Interaction) -> bool:
     """
     The function `is_banned_user` checks if a user is banned based on their interaction and the banned
     time.
@@ -212,7 +212,7 @@ def is_banned_user_ctx():
         raise BannedPlayerCtx("You are banned from using this bot. Please contact an admin for more information.")
     return commands.check(predicate)
 
-def flatten_list(nested_list):
+def flatten_list(nested_list: list|tuple) -> list:
     """
     The `flatten_list` function recursively flattens a nested list into a single flat list.
 
@@ -230,7 +230,7 @@ def flatten_list(nested_list):
             flat_list.append(item)
     return flat_list
 
-def round_int(num: float):
+def round_int(num: float) -> int:
     """
     The function `round_int` rounds a given number to the nearest integer based on the decimal value.
 
@@ -263,7 +263,7 @@ def get_db_connection(path: str, check_same_thread: bool = False) -> Connection:
     db_path = str(Path(path))
     return connect(db_path, check_same_thread=check_same_thread)
 
-def split_on_newlines(text: str, max_length=1024):
+def split_on_newlines(text: str, max_length=1024) -> list[str]:
     result = []
     start = 0
     while start < len(text):
@@ -487,13 +487,13 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.close()
     conn.close()
 
-    conn = get_db_connection("assets/database/puffs.db")
-    cursor = conn.cursor()
     if int(pity) < flags.PITY_LIMIT:
         isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
-    else: isRareval = 2  # When pity hits 100, it guarantees a gold or limited roll
+    else: isRareval = 2  # When pity hits, it guarantees a gold or limited roll
     if isRareval >= 2: # Rolls again
         isRareval = choices([2,3], weights=flags.LIMITED_WEIGHTS, k=1)[0]
+    conn = get_db_connection("assets/database/puffs.db")
+    cursor = conn.cursor()
     # Gets data to roll individually
     cursor.execute("SELECT id, weight FROM puffs WHERE isRare = ?", (isRareval,))
     data =  cursor.fetchall()
@@ -575,6 +575,8 @@ async def get_pity(interaction: discord.Interaction):
     """
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (interaction.user.id,))
+    conn.commit()
     cursor.execute("SELECT pity FROM stats WHERE username = ?", (interaction.user.id,))
     pity = cursor.fetchone()[0]
     cursor.close()
@@ -1506,7 +1508,7 @@ class NPCBattling(discord.ui.View):
         Calculate the total power of the user's lineup based on their puffs' stats.
         """
         total_power = 0
-        for puff in battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {}):
+        for puff in battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {})[0]:
             total_power += puff.attack + puff.health + puff.critChance + puff.critDmg + puff.defense + puff.defensePenetration + puff.trueDefense
         return total_power
 
@@ -1544,7 +1546,7 @@ class NPCBattling(discord.ui.View):
         # Simulate the battle
         results = []
         scores = []
-        for u_puff, o_puff in zip(battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {}), npc_lineup):
+        for u_puff, o_puff in zip(battlefunctions.get_puffs_for_battle(self.lineup, self.user.id, {})[0], npc_lineup):
             try:
                 result_battle, score = battlefunctions.battle(u_puff, o_puff)
                 results.append(result_battle)
@@ -1666,8 +1668,16 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     conn.close()
 
     # Convert names to Puff objects
-    user_puffs = battlefunctions.get_puffs_for_battle(user_lineup, user_id, user_food)
-    opponent_puffs = battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id, opponent_food)
+    user_puffs, user_food = battlefunctions.get_puffs_for_battle(user_lineup, user_id, user_food)
+    opponent_puffs, opponent_food = battlefunctions.get_puffs_for_battle(opponent_lineup, opponent_id, opponent_food)
+
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE pvp_lineup SET food = ? WHERE username = ?", (pack_info(user_food), user_id))
+    cursor.execute("UPDATE pvp_lineup SET food = ? WHERE username = ?", (pack_info(opponent_food), opponent_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     results = []
     scores = []
@@ -1711,6 +1721,8 @@ class LineupView(discord.ui.View):
         self.owned_puffs = battlefunctions.get_owned(self.user_id)
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (self.user_id,))
+        conn.commit()
         cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (user_id,))
         self.food = unpack_info(cursor.fetchone()[0], True, False)
         cursor.close()
@@ -1726,7 +1738,7 @@ class LineupView(discord.ui.View):
         else:
             self.puff_names = sorted(self.owned_puffs.keys(), reverse=self.level_order)
 
-        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id, self.food, True)
+        self.puff_stats = battlefunctions.get_puffs_for_battle(self.puff_names, self.user_id, self.food, True)[0]
         self.lineup_puffs = battlefunctions.get_lineup(self.user_id)
         ownedPuffsmessage = "\n".join(
             f"* {puff.name} (Level {puff.level})\n"
@@ -2415,9 +2427,9 @@ async def checkMessage(message: discord.Message):
         await message.add_reaction("<:skater:1345246453911781437>")
     if "demon puff" in message.content.lower():
         await message.add_reaction("<:demon:1359667344552497344>")
-    if "hi " in message.content.lower() and message.author.id in ADMIN_USERS:
+    if "hi strawberry puff bot" in message.content.lower() and message.author.id in ADMIN_USERS:
         await message.reply(f"Hi Admin {message.author.display_name}! How may I serve you today?\n||-# Please don't send me back to the mines :sob:||")
-    elif "hi " in message.content.lower() and message.author.id != bot.user.id: # type: ignore
+    elif "hi strawberry puff bot" in message.content.lower() and message.author.id != bot.user.id: # type: ignore
         await message.reply("Hi there!")
         await message.add_reaction("👋")
 
