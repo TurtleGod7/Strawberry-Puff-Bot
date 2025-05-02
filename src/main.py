@@ -1497,6 +1497,7 @@ class BattleConfirmView(discord.ui.View):
         if self.result is None:
             self.stop()
 
+'''
 class NPCBattling(discord.ui.View):
     def __init__(self, user, lineup):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
@@ -1575,6 +1576,7 @@ class NPCBattling(discord.ui.View):
     @discord.ui.button(label="Hard", style=discord.ButtonStyle.danger)
     async def hard(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.generate_embed(interaction, "hard")
+'''
 
 @bot.tree.command(name="battle", description="Battle another user!")
 @discord.app_commands.check(is_banned_user)
@@ -1683,11 +1685,12 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     scores = []
     for u_puff, o_puff in zip(user_puffs, opponent_puffs):
         try:
-            result_battle, score = battlefunctions.battle(u_puff, o_puff)
-            results.append(result_battle)
-            scores.append(score)
+            events, user_puffs, opponent_puffs  = battlefunctions.battle(u_puff, o_puff, user_puffs, opponent_puffs)
+            results.extend(events)
+            scores.append(results.pop())
         except AttributeError:
             results.append("The program broke here, please notify the developer"); scores.append(0)
+            raise
     overall_score = round_int(mean(scores))
     color = weightedColor.get(overall_score)
     winner = interaction.user.display_name

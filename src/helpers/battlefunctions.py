@@ -1,3 +1,6 @@
+from ast import List
+from turtle import pos
+import types
 from typing import Sequence, final
 from helpers.flags import DEBUG, MONEY_FROM_WIN
 from sqlite3 import connect
@@ -7,10 +10,10 @@ from main import round_int
 
 effectivenessChart: dict[str, dict[str, float]] = {
     "Melee": {"Melee": 0, "Ranged": .25, "Magic": -.25, "Support": 0, "Tank": -.25},
-    "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": .25},
-    "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": 0},
-    "Support": {"Melee": 0, "Ranged": 0, "Magic": -.25, "Support": 0, "Tank": .25},
-    "Tank": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": 0, "Tank": 0}
+    "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": -.25},
+    "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": -.25},
+    "Support": {"Melee": 0, "Ranged": 0, "Magic": -.25, "Support": 0, "Tank": -.25},
+    "Tank": {"Melee": -.25, "Ranged": -.25, "Magic": -.25, "Support": -.25, "Tank": -.25}
 }
 
 foodChart: dict[str, list[list[int]]] = {
@@ -74,6 +77,22 @@ class TankDamage(DamageType):
     def __init__(self):
         super().__init__("Tank")
 
+class BlankDamage(DamageType):
+    def __init__(self):
+        super().__init__("Blank")
+
+def heal(self, target):
+    heal_amt = self.health * 0.75
+    for puff in target:
+        target.health += heal_amt
+    return f"{self.name} heals {target.name} for {heal_amt} health!"
+
+SPECIAL_ABILITIES = {
+    "Fairy Puff": {
+        "buff": heal,
+    },
+}
+
 typeChart = {
     "melee": MeleeDamage,
     "ranged": RangedDamage,
@@ -95,6 +114,14 @@ class Puff:
         self.defense = data[4]
         self.defensePenetration = data[5]
         self.trueDefense = data[6]
+        self.special_abilities = SPECIAL_ABILITIES.get(name, {})
+    
+    def use_special_ability(self, attack_name: str, target: list):
+        if self.special_abilities:
+            ability = self.special_abilities.get(attack_name, None)
+            if ability:
+                return ability(self, target)
+        return None
 
 class LineupPuff(Puff):
     def __init__(self, name: str, data: Sequence[int|float], databuff: list[int], owner: int, types: list[DamageType], level=0):
@@ -175,13 +202,14 @@ def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, s
             for stat in range(len(foodChart.get(buff, [])[0])):
                 if forlineupfunc: databuff[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
                 else: data[foodChart[buff][0][stat]] += foodChart[buff][1][stat]
-        if not forlineupfunc: del buffs[puff_names[puff]]
         types = puff_data[puff][1].split(";")
+        if not forlineupfunc and puff_names[puff] in buffs: del buffs[puff_names[puff]]
         typeList = []
         if DEBUG: print(f"Original Types: {types}")
         for type in types:
             try: typeList.append(typeChart[type]())
             except: continue
+        if len(typeList) == 1: typeList.append(BlankDamage())
         if DEBUG: print(f"Final Types: {typeList}")
         if forlineupfunc:
             final_data.append(
@@ -261,7 +289,7 @@ def get_owned(user_id: int) -> dict[str, int]:
     conn.close()
     return unpack_info(packedStats) # type: ignore
 
-def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
+def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequence[Puff | LineupPuff], context2: Sequence[Puff | LineupPuff]) -> tuple[Sequence[str | int], Sequence[Puff | LineupPuff], Sequence[Puff | LineupPuff]]:
     """
     This Python function simulates a battle between two Puff objects by reducing their health based on
     their attack values until one of them wins or it's a draw.
@@ -278,6 +306,29 @@ def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
     - If both `puff1` and `puff2` have health less than or equal to 0, it returns "⚔️ It's a draw!
     (puff1.name vs puff2.name)"
     """
+    events = []
+    tank1 = []
+    tank2 = []
+    ranged1 = []
+    ranged2 = []
+    support1 = []
+    support2 = []
+    pos1 = context1.index(puff1)
+    pos2 = context2.index(puff2)
+    for _ in range(len(context1)):
+        if context1[_].types[0].type == "Tank" or context1[_].types[1].type == "Tank":
+            tank1.append(_) # Only adds indexes for references instead of copying
+        if context1[_].types[0].type == "Ranged" or context1[_].types[1].type == "Ranged":
+            ranged1.append(_)
+        if context1[_].types[0].type == "Support" or context1[_].types[1].type == "Support":
+            support1.append(_)
+    for _ in range(len(context2)):
+        if context2[_].types[0].type == "Tank" or context2[_].types[1].type == "Tank":
+            tank2.append(_)
+        if context2[_].types[0].type == "Ranged" or context2[_].types[1].type == "Ranged":
+            ranged2.append(_)
+        if context2[_].types[0].type == "Support" or context2[_].types[1].type == "Support":
+            support2.append(_)
     while puff1.health > 0 and puff2.health > 0:
         if DEBUG:
             print(f"{puff1.name} ({puff1.health}) vs {puff2.name} ({puff2.health})\nOpponent: {puff1.owner} vs {puff2.owner}")
@@ -286,10 +337,16 @@ def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
         # Owner's puff attacks first
         attack = 0
         typeBuff = 0
+        for puff in support1:
+            puff.use_special_ability("buff", context1)
         if chance <= puff1.critChance:
             attack = puff1.attack * (puff1.critDmg*.10 + 1)
+            events.append(f"{puff1.name} crits {puff2.name} for {attack} damage!")
         else:
             attack = puff1.attack
+        for rangedpuff in range(len(ranged1)):
+            if puff1 == context1[ranged1[rangedpuff]]: continue
+            attack += context1[ranged1[rangedpuff]].attack * (.9 + (.1*(ranged1[rangedpuff]-pos1)))
         SafeDmg= attack * puff1.defensePenetration# Dmg safe from normal def
         DefendableDmg = (attack-SafeDmg)*(1-(puff2.defense*.01))
         attack = SafeDmg + DefendableDmg - puff2.trueDefense
@@ -298,14 +355,34 @@ def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
                 typeBuff += effectivenessChart[type.type][puff2.types[0].type]
                 typeBuff += effectivenessChart[type.type][puff2.types[1].type]
             except: continue
+        attack = attack * (1 + typeBuff) # Buffs the attack based on the type effectiveness
+        if (len(tank2) > 0 and (puff2.types[0].type != "Tank" or puff2.types[1].type != "Tank")):
+            attack = attack / (len(tank2)+1)
+            for tank in tank2:
+                context2[tank].health -= attack*.75
+                if context2[tank].health <= 0:
+                    context2[tank].health = 0
+                    events.append(f"{context2[tank].name} has fainted!")
+        elif (len(tank2) > 1 and (puff2.types[0].type == "Tank" or puff2.types[1].type == "Tank")):
+            attack = attack / (len(tank2))
+            for tank in tank2:
+                context2[tank].health -= attack*.75
+                if context2[tank].health <= 0:
+                    context2[tank].health = 0
+                    events.append(f"{context2[tank].name} has fainted!")
         puff2.health -= attack
         # Opponent's puff attacks next
         attack = 0 # Resets for next calculation
         typeBuff = 0
+        for puff in support2:
+            puff.use_special_ability("buff", context2)
         if chance <= puff2.critChance:
             attack = puff2.attack * (puff2.critDmg*.10 + 1)
         else:
             attack = puff2.attack
+        for rangedpuff in range(len(ranged2)):
+            if puff2 == context2[ranged2[rangedpuff]]: continue
+            attack += context2[ranged2[rangedpuff]].attack * (.9 + (.1*(ranged2[rangedpuff]-pos2)))
         SafeDmg= attack * puff2.defensePenetration
         DefendableDmg = (attack-SafeDmg)*(1-(puff1.defense*.01))
         attack = SafeDmg + DefendableDmg - puff1.trueDefense
@@ -314,16 +391,32 @@ def battle(puff1: Puff, puff2: Puff) -> tuple[str, int]:
                 typeBuff += effectivenessChart[type.type][puff2.types[0].type]
                 typeBuff += effectivenessChart[type.type][puff2.types[1].type]
             except: continue
+        attack = attack * (1 + typeBuff) # Buffs the attack based on the type effectiveness
+        if (len(tank1) > 0 and (puff2.types[0].type != "Tank" or puff2.types[1].type != "Tank")):
+            attack = attack / (len(tank1)+1)
+            for tank in tank1:
+                context1[tank].health -= attack*.75
+                if context1[tank].health <= 0:
+                    context1[tank].health = 0
+                    events.append(f"{context1[tank].name} has fainted!")
+        elif (len(tank1) > 1 and (puff2.types[0].type == "Tank" or puff2.types[1].type == "Tank")):
+            attack = attack / (len(tank1))
+            for tank in tank1:
+                context1[tank].health -= attack*.75
+                if context1[tank].health <= 0:
+                    context1[tank].health = 0
+                    events.append(f"{context1[tank].name} has fainted!")
         puff1.health -= attack
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
         if puff1.health <= 0 and puff2.health <= 0:
-            return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0
+            events.extend([f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0])
         if puff2.health <= 0:
-            return f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1
+            events.extend([f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1])
         if puff1.health <= 0:
-            return f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1
-    return f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0 # Catch all
+            events.extend([f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
+    return events, context1, context2 # Catch all
+    # Change to return a list of events that has happened with score at the end and the new context lists
 
 def finalize_battle(winner: int, loser: int) -> None:
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")

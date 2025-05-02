@@ -4,7 +4,7 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 
 ## Current Banner
 
-![Latest Banner](src/assets/profile/banner_demon.gif)
+![Latest Banner](src/assets/profile/banner_tank.gif)
 
 ## Features
 
