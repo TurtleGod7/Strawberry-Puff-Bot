@@ -1,7 +1,5 @@
-from ast import List
-from turtle import pos
-import types
-from typing import Sequence, final
+from _collections_abc import Sequence
+from re import M
 from helpers.flags import DEBUG, MONEY_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
@@ -81,16 +79,62 @@ class BlankDamage(DamageType):
     def __init__(self):
         super().__init__("Blank")
 
-def heal(self, target):
+def heal(self, puff_list, current_puff):
+    if self.health <= 0: return ""
     heal_amt = self.health * 0.75
-    for puff in target:
-        target.health += heal_amt
-    return f"{self.name} heals {target.name} for {heal_amt} health!"
+    for puff in puff_list:
+        puff.health += heal_amt
+    return f"{self.name} heals the team for {round(heal_amt,1)} health!"
+
+def laziness(self, puff_list, current_puff):
+    buff_amt = self.attack * 0.25 + self.trueDefense
+    current_puff.trueDefense += buff_amt
+    current_puff.attack -= buff_amt * 0.5
+    return f"{self.name} makes {current_puff.name} lazy, increasing their true defense by {round(buff_amt,1)} but reducing their attack by {round(buff_amt*0.5,1)}!"
+
+def its_just_a_feature(self, puff_list, current_puff):
+    buff_amt = self.attack * 0.5 + self.defensePenetration * 0.5
+    current_puff.defensePenetration += buff_amt
+    current_puff.health -= buff_amt * 0.5
+    return f"Programmer Puff found bugs in the code, increasing {current_puff.name}'s defense penetration by {round(buff_amt,1)}% reducing their health by {round(buff_amt*0.5,1)}!"
+
+def special_support(self, puff_list, current_puff):
+    count = 0
+    check_list = ["Strawberry Puff", "Luna Puff", "`Progammer Puff`", "Painter Puff"]
+    for puff in puff_list:
+        if puff.name in check_list: count += 1
+    if count >= 3: 
+        self.defense += self.defense
+        return f"Skater Puff has a special bond with the team, doubling their defense!"
+    else: return ""
+
+def tank_outer_shell(self, puff_list, current_puff):
+    if self.health >= 0 or self.revivelikeactionscount >= 1: return ""
+    self.health = self.healthorg * 0.25
+    self.defense = 17
+    self.critChance = 40
+    self.critDmg = 70
+    self.trueDefense = 5
+    self.revivelikeactionscount += 1
+    self.types[0] = MeleeDamage()
+    return f"Tank Puff's outer shell has been blown off revealing their true form!"
 
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
         "buff": heal,
     },
+    "Sleepy Puff": {
+        "buff" : laziness,
+    },
+    "`Progammer Puff`": {
+        "buff" : its_just_a_feature,
+    },
+    "Skater Puff": {
+        "lineup_based_buff" : special_support,
+    },
+    "Tank Puff": {
+        "revive": tank_outer_shell, 
+    }
 }
 
 typeChart = {
@@ -109,19 +153,21 @@ class Puff:
         self.types = types
         self.attack = data[0]
         self.health = data[1]
+        self.healthorg = self.health
         self.critChance = data[2]
         self.critDmg = data[3]
         self.defense = data[4]
         self.defensePenetration = data[5]
         self.trueDefense = data[6]
         self.special_abilities = SPECIAL_ABILITIES.get(name, {})
+        self.revivelikeactionscount = 0
     
-    def use_special_ability(self, attack_name: str, target: list):
+    def use_special_ability(self, attack_name: str, target: Sequence, current_puff) -> str:
         if self.special_abilities:
             ability = self.special_abilities.get(attack_name, None)
             if ability:
-                return ability(self, target)
-        return None
+                return ability(self, target, current_puff)
+        return ""
 
 class LineupPuff(Puff):
     def __init__(self, name: str, data: Sequence[int|float], databuff: list[int], owner: int, types: list[DamageType], level=0):
@@ -219,7 +265,8 @@ def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, s
             final_data.append(
                 Puff(puff_names[puff],data,user_id, typeList, level)
             )
-
+    for puff in final_data:
+        puff.use_special_ability("lineup_based_buff", final_data, puff)
     return final_data, buffs
 
 def get_lineup(user_id: int):
@@ -307,14 +354,17 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
     (puff1.name vs puff2.name)"
     """
     events = []
-    tank1 = []
-    tank2 = []
-    ranged1 = []
-    ranged2 = []
-    support1 = []
-    support2 = []
-    pos1 = context1.index(puff1)
-    pos2 = context2.index(puff2)
+    events.append(f"Battle: {puff1.name} vs {puff2.name}")
+    if puff2.health <= 0: return [f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1], context1, context2
+    if puff1.health <= 0: return [f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1], context1, context2
+    tank1: list[int] = []
+    tank2: list[int] = []
+    ranged1: list[int] = []
+    ranged2: list[int] = []
+    support1: list[int] = []
+    support2: list[int] = []
+    pos1: int = context1.index(puff1)
+    pos2: int = context2.index(puff2)
     for _ in range(len(context1)):
         if context1[_].types[0].type == "Tank" or context1[_].types[1].type == "Tank":
             tank1.append(_) # Only adds indexes for references instead of copying
@@ -338,7 +388,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         attack = 0
         typeBuff = 0
         for puff in support1:
-            puff.use_special_ability("buff", context1)
+            result = context1[puff].use_special_ability("buff", context1, puff1)
+            if result != "": events.append(result)
         if chance <= puff1.critChance:
             attack = puff1.attack * (puff1.critDmg*.10 + 1)
             events.append(f"{puff1.name} crits {puff2.name} for {attack} damage!")
@@ -375,7 +426,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         attack = 0 # Resets for next calculation
         typeBuff = 0
         for puff in support2:
-            puff.use_special_ability("buff", context2)
+            result = context2[puff].use_special_ability("buff", context2, puff2)
+            if result != "": events.append(result)
         if chance <= puff2.critChance:
             attack = puff2.attack * (puff2.critDmg*.10 + 1)
         else:
@@ -410,11 +462,18 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
         if puff1.health <= 0 and puff2.health <= 0:
+            puff1.use_special_ability("revive", context1, puff1)
+            puff2.use_special_ability("revive", context2, puff2)
             events.extend([f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0])
+            continue
         if puff2.health <= 0:
+            puff2.use_special_ability("revive", context2, puff2)
             events.extend([f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1])
+            continue
         if puff1.health <= 0:
+            puff1.use_special_ability("revive", context1, puff1)
             events.extend([f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
+            continue
     return events, context1, context2 # Catch all
     # Change to return a list of events that has happened with score at the end and the new context lists
 

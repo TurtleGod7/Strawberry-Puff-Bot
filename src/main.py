@@ -880,7 +880,7 @@ class InformationView(discord.ui.View):
                 "title": "Battle statistics",
                 "description": "**Attack**: This is the amount of damage a puff can deal to the opponent's puff.\n"
                                 "**Health**: This is the amount of damage a puff can take before it faints\n"
-                                "**Chance**: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\n"
+                                "**Crit Chance**: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\n"
                                 "**Crit Damage**: This is the amount of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n"
                                 "**Defense**: This is the percent of damage the puff blocks\n"
                                 "**Defense Penetration**: This is the percent of defense the puff can shred through before it becomes blocked\n"
@@ -1687,7 +1687,8 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
         try:
             events, user_puffs, opponent_puffs  = battlefunctions.battle(u_puff, o_puff, user_puffs, opponent_puffs)
             results.extend(events)
-            scores.append(results.pop())
+            val = results.pop()
+            scores.append(val)
         except AttributeError:
             results.append("The program broke here, please notify the developer"); scores.append(0)
             raise
@@ -1704,8 +1705,9 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     elif overall_score < 0:
         battlefunctions.finalize_battle(opponent_id, user_id)
 
-    result_message = "\n".join(results)
-    embed = discord.Embed(title=f"Puff Battle Results - {winner if winner != '' else '**⚔️ DRAW**'}", description=result_message, color=color)
+    result_message = shorten_message("\n".join(results), user_id)
+    embed = discord.Embed(title=f"Puff Battle Results - {winner + " won" if winner != '' else '**⚔️ DRAW**'}", color=color)
+    embed.add_field(name="Battle Events", value=result_message, inline=False)
     embed.add_field(name="Competitors", value=f"<@{interaction.user.id}> vs <@{opponent.id}>", inline=False)
     embed.add_field(name="Your Lineup", value=", ".join(user_lineup), inline=True)
     embed.add_field(name="Opponent's Lineup", value=", ".join(opponent_lineup), inline=True)
@@ -1871,11 +1873,11 @@ async def preview(interaction: discord.Interaction, puff: str):
     puff = " ".join(puff.split("_"))
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT description, imagepath, isRare, stats, types FROM puffs WHERE name = ?", (puff,))
+    cursor.execute("SELECT description, imagepath, isRare, stats, types, specials FROM puffs WHERE name = ?", (puff,))
     puff_data = cursor.fetchone()
     cursor.close()
     conn.close()
-    description, imagepath, isRare, stats, types = puff_data
+    description, imagepath, isRare, stats, types, specials = puff_data
     embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
     embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
@@ -1885,7 +1887,8 @@ async def preview(interaction: discord.Interaction, puff: str):
     )
     try: embed.add_field(name="Stats", value=stats_message, inline=False)
     except AttributeError: embed.add_field(name="Stats", value="No stats available for this puff", inline=False)
-    embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}", inline=False)
+    if specials is not None: embed.add_field(name="Special Abilities", value=specials, inline=False)
+    embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}".capitalize(), inline=False)
     embed.set_image(url=flags.IMAGE_PATH + f"puffs/{imagepath}?=raw")
     await interaction.response.send_message(embed=embed)
 
