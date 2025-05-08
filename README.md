@@ -1,6 +1,6 @@
 # Strawberry Puff Bot
 
-Strawberry Puff Bot is a Discord gacha bot designed to enhance your server experience with fun and interactive rolling features for cute doodles (puffs).
+Strawberry Puff Bot is a feature-rich Discord gacha bot where you can collect, upgrade, and battle with unique "puffs." Roll for new puffs, manage your lineup, compete in PvP battles, and track your stats—all with charming artwork and interactive commands. Customize your experience with settings, shop for items, and enjoy ongoing updates, all within your server!
 
 ## Current Banner
 
@@ -8,12 +8,12 @@ Strawberry Puff Bot is a Discord gacha bot designed to enhance your server exper
 
 ## Features
 
-- Roll random puffs with varying rarities
-- Track your roll statistics
-- View drop rates for each puff
-- Compare your rolls with other users
-- Customizable settings
-- And more!
+- 🎲 **Roll for Puffs:** Collect random puffs of varying rarities and abilities.
+- 📊 **Track & Compare Stats:** View your collection progress and compare with other users.
+- ⚔️ **PvP Battles & Lineups:** Build lineups and battle friends using unique puff skills.
+- 🛒 **Shop & Feed:** Buy items and feed your puffs to boost their power.
+- ⚙️ **Customizable Settings:** Adjust notifications, preferences, and get help—all in one place.
+- ✨ **Ongoing Updates:** New features and puffs added regularly!
 
 ## Bot Info
 

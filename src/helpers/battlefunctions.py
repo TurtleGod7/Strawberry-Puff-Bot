@@ -1,9 +1,9 @@
 from _collections_abc import Sequence
-from re import M
+from re import sub
 from helpers.flags import DEBUG, MONEY_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
-from random import randint
+from random import randint, choice
 from main import round_int
 
 effectivenessChart: dict[str, dict[str, float]] = {
@@ -11,7 +11,7 @@ effectivenessChart: dict[str, dict[str, float]] = {
     "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": -.25},
     "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": -.25},
     "Support": {"Melee": 0, "Ranged": 0, "Magic": -.25, "Support": 0, "Tank": -.25},
-    "Tank": {"Melee": -.25, "Ranged": -.25, "Magic": -.25, "Support": -.25, "Tank": -.25}
+    "Tank": {"Melee": -.25, "Ranged": -.25, "Magic": -.25, "Support": -.25, "Tank": 0}
 }
 
 foodChart: dict[str, list[list[int]]] = {
@@ -105,7 +105,7 @@ def special_support(self, puff_list, current_puff):
         if puff.name in check_list: count += 1
     if count >= 3: 
         self.defense += self.defense
-        return f"Skater Puff has a special bond with the team, doubling their defense!"
+        return f"Skater Puff has a special bond with the team, doubling her defense!"
     else: return ""
 
 def tank_outer_shell(self, puff_list, current_puff):
@@ -118,6 +118,62 @@ def tank_outer_shell(self, puff_list, current_puff):
     self.revivelikeactionscount += 1
     self.types[0] = MeleeDamage()
     return f"Tank Puff's outer shell has been blown off revealing their true form!"
+
+def united_kingdom(self, puff_list, current_puff):
+    if self.health > self.healthorg * 0.5 or self.revivelikeactionscount >= 1: return ""
+    health_sum = 0
+    def_sum = 0
+    for puff in puff_list:
+        if puff.name == "King Puff": continue
+        if puff.health > 0: 
+            health_sum += puff.health
+            def_sum += puff.defense
+    self.health += health_sum * 0.5
+    self.defense += def_sum * 0.5
+    return f"King Puff unites his kingdom, increasing the centripetal forces within the state; increasing his health by {round(health_sum*0.5,1)} and defense by {round(def_sum*0.5,1)}!"
+
+# List and dict here so it doesn't have to be reinitialized every time puff attacks
+stat_names: list[str] = ["attack", "health", "critChance", "critDmg", "defense", "defensePenetration", "trueDefense"]
+stat_boosts = {
+        "attack": 10,
+        "health": 10,
+        "critChance": 30,
+        "critDmg": 100,
+        "defense": 30,
+        "defensePenetration": 30,
+        "trueDefense": 10
+    }
+
+def heavenly_boon(self, puff_list, current_puff):
+    # Check and initialize attributes if they don't exist
+    if not hasattr(self, "puffboost"):
+        self.puffboost = None
+    if not hasattr(self, "stattypeboost"):
+        self.stattypeboost = None
+    if not hasattr(self, "prev_boost_value"):
+        self.prev_boost_value = None
+
+    # If a previous boost exists, revert it
+    if self.puffboost is not None and self.stattypeboost is not None and self.prev_boost_value is not None:
+        setattr(self.puffboost, self.stattypeboost, self.prev_boost_value)
+
+    # Choose a random puff and stat to boost
+    choosen_puff = choice(puff_list)
+    choosen_stat_name = choice(stat_names)
+    
+
+    # Save previous value for reverting later
+    self.prev_boost_value = getattr(choosen_puff, choosen_stat_name)
+    # Apply boost
+    setattr(choosen_puff, choosen_stat_name, self.prev_boost_value + stat_boosts[choosen_stat_name])
+
+    # Save which puff and stat were boosted
+    self.puffboost = choosen_puff
+    self.stattypeboost = choosen_stat_name
+
+    # Format stat name: insert space before capital letters if camel case
+    formatted_stat_name = sub(r'(?<!^)(?=[A-Z])', ' ', choosen_stat_name).capitalize()
+    return f"{self.name} grants a heavenly boon! {choosen_puff.name}'s {formatted_stat_name} increased by {stat_boosts[choosen_stat_name]}!"
 
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
@@ -134,7 +190,13 @@ SPECIAL_ABILITIES = {
     },
     "Tank Puff": {
         "revive": tank_outer_shell, 
-    }
+    },
+    "King Puff": {
+        "revive": united_kingdom,
+    },
+    "Angel Puff": {
+        "buff": heavenly_boon,
+    },
 }
 
 typeChart = {
@@ -354,7 +416,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
     (puff1.name vs puff2.name)"
     """
     events = []
-    events.append(f"Battle: {puff1.name} vs {puff2.name}")
+    events.extend(["--------------",f"**Battle**: {puff1.name} vs {puff2.name}"])
     if puff2.health <= 0: return [f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1], context1, context2
     if puff1.health <= 0: return [f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1], context1, context2
     tank1: list[int] = []
@@ -379,86 +441,65 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             ranged2.append(_)
         if context2[_].types[0].type == "Support" or context2[_].types[1].type == "Support":
             support2.append(_)
-    while puff1.health > 0 and puff2.health > 0:
+    def perform_attack(attacker, defender, attacker_context, defender_context, attacker_support, attacker_ranged, defender_tank, attacker_pos, events):
         if DEBUG:
-            print(f"{puff1.name} ({puff1.health}) vs {puff2.name} ({puff2.health})\nOpponent: {puff1.owner} vs {puff2.owner}")
-        # BATTLE LOGIC
+            print(f"{attacker.name} ({attacker.health}) vs {defender.name} ({defender.health})\nOpponent: {attacker.owner} vs {defender.owner}")
         chance = randint(1, 100)
-        # Owner's puff attacks first
         attack = 0
         typeBuff = 0
-        for puff in support1:
-            result = context1[puff].use_special_ability("buff", context1, puff1)
+        # Support buffs
+        for puff in attacker_support:
+            result = attacker_context[puff].use_special_ability("buff", attacker_context, attacker)
             if result != "": events.append(result)
-        if chance <= puff1.critChance:
-            attack = puff1.attack * (puff1.critDmg*.10 + 1)
-            events.append(f"{puff1.name} crits {puff2.name} for {attack} damage!")
-        else:
-            attack = puff1.attack
-        for rangedpuff in range(len(ranged1)):
-            if puff1 == context1[ranged1[rangedpuff]]: continue
-            attack += context1[ranged1[rangedpuff]].attack * (.9 + (.1*(ranged1[rangedpuff]-pos1)))
-        SafeDmg= attack * puff1.defensePenetration# Dmg safe from normal def
-        DefendableDmg = (attack-SafeDmg)*(1-(puff2.defense*.01))
-        attack = SafeDmg + DefendableDmg - puff2.trueDefense
-        for type in puff1.types:
+        # Crit calculation
+        attack += attacker.attack
+        if chance <= attacker.critChance:
+            attack *= (attacker.critDmg * .10 + 1)
+            events.append(f"{attacker.name} crits {defender.name} for {round(attack,1 )} damage!")
+        # Ranged support
+        for rangedpuff in range(len(attacker_ranged)):
+            if attacker == attacker_context[attacker_ranged[rangedpuff]]: continue
+            calcattack = attacker_context[attacker_ranged[rangedpuff]].attack * (.9 + (.1 * (attacker_ranged[rangedpuff] - attacker_pos)))
+            if chance <= attacker_context[attacker_ranged[rangedpuff]].critChance:
+                calcattack = calcattack * (attacker_context[attacker_ranged[rangedpuff]].critDmg * .10 + 1)
+                events.append(f"{attacker_context[attacker_ranged[rangedpuff]].name} crits {defender.name} for {round(calcattack,1 )} damage with ranged support!")
+            attack += calcattack
+        SafeDmg = attack * attacker.defensePenetration
+        DefendableDmg = (attack - SafeDmg) * (1 - (defender.defense * .01))
+        attack = SafeDmg + DefendableDmg - defender.trueDefense
+        # Type effectiveness
+        for type in attacker.types:
             try:
-                typeBuff += effectivenessChart[type.type][puff2.types[0].type]
-                typeBuff += effectivenessChart[type.type][puff2.types[1].type]
+                typeBuff += effectivenessChart[type.type][defender.types[0].type]
+                typeBuff += effectivenessChart[type.type][defender.types[1].type]
             except: continue
-        attack = attack * (1 + typeBuff) # Buffs the attack based on the type effectiveness
-        if (len(tank2) > 0 and (puff2.types[0].type != "Tank" or puff2.types[1].type != "Tank")):
-            attack = attack / (len(tank2)+1)
-            for tank in tank2:
-                context2[tank].health -= attack*.75
-                if context2[tank].health <= 0:
-                    context2[tank].health = 0
-                    events.append(f"{context2[tank].name} has fainted!")
-        elif (len(tank2) > 1 and (puff2.types[0].type == "Tank" or puff2.types[1].type == "Tank")):
-            attack = attack / (len(tank2))
-            for tank in tank2:
-                context2[tank].health -= attack*.75
-                if context2[tank].health <= 0:
-                    context2[tank].health = 0
-                    events.append(f"{context2[tank].name} has fainted!")
-        puff2.health -= attack
-        # Opponent's puff attacks next
-        attack = 0 # Resets for next calculation
-        typeBuff = 0
-        for puff in support2:
-            result = context2[puff].use_special_ability("buff", context2, puff2)
-            if result != "": events.append(result)
-        if chance <= puff2.critChance:
-            attack = puff2.attack * (puff2.critDmg*.10 + 1)
-        else:
-            attack = puff2.attack
-        for rangedpuff in range(len(ranged2)):
-            if puff2 == context2[ranged2[rangedpuff]]: continue
-            attack += context2[ranged2[rangedpuff]].attack * (.9 + (.1*(ranged2[rangedpuff]-pos2)))
-        SafeDmg= attack * puff2.defensePenetration
-        DefendableDmg = (attack-SafeDmg)*(1-(puff1.defense*.01))
-        attack = SafeDmg + DefendableDmg - puff1.trueDefense
-        for type in puff1.types:
-            try:
-                typeBuff += effectivenessChart[type.type][puff2.types[0].type]
-                typeBuff += effectivenessChart[type.type][puff2.types[1].type]
-            except: continue
-        attack = attack * (1 + typeBuff) # Buffs the attack based on the type effectiveness
-        if (len(tank1) > 0 and (puff2.types[0].type != "Tank" or puff2.types[1].type != "Tank")):
-            attack = attack / (len(tank1)+1)
-            for tank in tank1:
-                context1[tank].health -= attack*.75
-                if context1[tank].health <= 0:
-                    context1[tank].health = 0
-                    events.append(f"{context1[tank].name} has fainted!")
-        elif (len(tank1) > 1 and (puff2.types[0].type == "Tank" or puff2.types[1].type == "Tank")):
-            attack = attack / (len(tank1))
-            for tank in tank1:
-                context1[tank].health -= attack*.75
-                if context1[tank].health <= 0:
-                    context1[tank].health = 0
-                    events.append(f"{context1[tank].name} has fainted!")
-        puff1.health -= attack
+        attack = attack * (1 + typeBuff)
+        # Tank mechanics
+        # Tank mechanics refactored to reduce repetition
+        tanks_to_hit = []
+        if len(defender_tank) > 0 and (defender.types[0].type != "Tank" or defender.types[1].type != "Tank"):
+            attack_split = attack / (len(defender_tank) + 1)
+            tanks_to_hit = defender_tank
+        elif len(defender_tank) > 1 and (defender.types[0].type == "Tank" or defender.types[1].type == "Tank"):
+            attack_split = attack / len(defender_tank)
+            tanks_to_hit = [tank for tank in defender_tank if defender_context[tank].name != defender.name]
+        else: attack_split = None  # No tank splitting
+
+        if tanks_to_hit and attack_split is not None:
+            for tank_idx in tanks_to_hit:
+                defender_context[tank_idx].health -= attack_split
+                if defender_context[tank_idx].health <= 0:
+                    defender_context[tank_idx].use_special_ability("revive", defender_context, defender_context[tank_idx])
+                    if defender_context[tank_idx].health <= 0: events.append(f"{defender_context[tank_idx].name} has fainted!")
+        defender.health -= attack
+
+    while puff1.health > 0 and puff2.health > 0:
+        perform_attack(
+            puff1, puff2, context1, context2, support1, ranged1, tank2, pos1, events
+        )
+        perform_attack(
+            puff2, puff1, context2, context1, support2, ranged2, tank1, pos2, events
+        )
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
         if puff1.health <= 0 and puff2.health <= 0:

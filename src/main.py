@@ -308,7 +308,8 @@ def shorten_message(message: str, user: int) -> str:
         "Speed": "Spd",
         "Defense": "Def",
     }
-
+    override = 0
+    if len(message) >= 1024: override = 1
     base_dir = Path(__file__).resolve().parent  # goes from src/helpers -> src
     db_path = str(base_dir / "assets" / "database" / "users.db")  # goes from src -> assets/database/users.db
     conn = get_db_connection(db_path)
@@ -320,7 +321,7 @@ def shorten_message(message: str, user: int) -> str:
     conn.close()
     if flags.DEBUG:
         print(f"ShortenText - {user}: {data}")
-    if data != 1:
+    if data != 1 or override != 1:
         return message
     for phrase in keywords.keys():
         # Escape special characters in phrase for regex and match word boundaries
@@ -899,6 +900,11 @@ class InformationView(discord.ui.View):
                 "description" : "There are 5 types in the game: Melee, Ranged, Magic, Support, and Tank. Each type has a different effectiveness against the other types:\n",
                 "image" : flags.IMAGE_PATH + "tables/typechartwhite.png"
             },
+            {
+                "title": "Anything else",
+                "description": "If you have any other information you need to know, just DM me!"
+                
+            }
         ]
         self.page = 0
         self.items_per_page = flags.ITEMS_PER_PAGE
@@ -1706,13 +1712,18 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
         battlefunctions.finalize_battle(opponent_id, user_id)
 
     result_message = shorten_message("\n".join(results), user_id)
+    shortened_message = None
+    if len(result_message) >= 1024:
+        shortened_message = split_on_newlines(result_message, 1020)[0] + "..."
     embed = discord.Embed(title=f"Puff Battle Results - {winner + " won" if winner != '' else '**⚔️ DRAW**'}", color=color)
-    embed.add_field(name="Battle Events", value=result_message, inline=False)
+    embed.add_field(name="Battle Events", value=(result_message if shortened_message is None else shortened_message), inline=False)
     embed.add_field(name="Competitors", value=f"<@{interaction.user.id}> vs <@{opponent.id}>", inline=False)
     embed.add_field(name="Your Lineup", value=", ".join(user_lineup), inline=True)
     embed.add_field(name="Opponent's Lineup", value=", ".join(opponent_lineup), inline=True)
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}{' / the rest of the events have been DMed to both users' if shortened_message is not None else ''}")
     await interaction.followup.send(embed=embed)
+    await dm_ping(user_id, "The battle has ended! Here are the events:\n" + result_message)
+    await dm_ping(opponent_id, "The battle has ended! Here are the events:\n" + result_message)
 
 class LineupView(discord.ui.View):
     '''
