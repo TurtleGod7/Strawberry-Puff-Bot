@@ -175,6 +175,16 @@ def heavenly_boon(self, puff_list, current_puff):
     formatted_stat_name = sub(r'(?<!^)(?=[A-Z])', ' ', choosen_stat_name).capitalize()
     return f"{self.name} grants a heavenly boon! {choosen_puff.name}'s {formatted_stat_name} increased by {stat_boosts[choosen_stat_name]}!"
 
+def terrors_from_the_shadow(self, puff_list, current_puff, otarget, ocurrent_puff):
+    chance = randint(1, 100)
+    isActive = False
+    if chance <= 30: isActive = True
+    elif chance <= 50 and self.name == "... ... ... .........": isActive = True
+    if isActive:
+        otarget.effects.append({"name":"stunned", "lifetime" : 2 if self.name == "... ... ... ........." else 1, "scenario": ["crit"]})
+        return f"{self.name} brings terrors from the shadow, stunning {self.name}"
+    else: return ""
+
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
         "buff": heal,
@@ -223,13 +233,50 @@ class Puff:
         self.trueDefense = data[6]
         self.special_abilities = SPECIAL_ABILITIES.get(name, {})
         self.revivelikeactionscount = 0
-    
-    def use_special_ability(self, attack_name: str, target: Sequence, current_puff) -> str:
+        self.effects: list[dict] = []  # Changed to list of dicts for effect tracking
+        self.can_attack = True
+
+    def use_special_ability(self, attack_name: str, target: Sequence, current_puff, otarget: Sequence=[], ocurrent_puff=None) -> str:
         if self.special_abilities:
             ability = self.special_abilities.get(attack_name, None)
-            if ability:
+            if ability and attack_name == "special_attack":
+                return ability(self, target, current_puff, otarget, ocurrent_puff) # type: ignore
+            elif ability:
                 return ability(self, target, current_puff)
         return ""
+
+    def eval_attack(self, scenario):
+        """
+        Checks all effects in self.effects. If an effect matches the scenario,
+        applies its inline function and manages its lifetime.
+        """
+        # Define effect handlers inline
+        effect_handlers = {
+            "stunned": lambda puff: setattr(puff, "can_attack", False),
+            "poisoned": lambda puff: setattr(puff, "health", puff.health - 5)
+        }
+
+        # Track effects to remove after processing
+        effects_to_remove = []
+
+        for effect in self.effects:
+            effect_name = effect.get("name", "blank")
+            lifetime = effect.get("lifetime", 0)
+
+            if scenario not in effect.get("scenario", []): continue
+            # Apply effect if handler exists
+            handler = effect_handlers.get(effect_name)
+            if handler: handler(self)
+
+            # Decrement lifetime
+            effect["lifetime"] = lifetime - 1
+
+            # Remove effect if lifetime is up
+            if effect["lifetime"] <= 0: effects_to_remove.append(effect)
+
+        # Remove expired effects
+        for effect in effects_to_remove: self.effects.remove(effect)
+        if not any(effect.get("name") == "stunned" for effect in self.effects): self.can_attack = True
 
 class LineupPuff(Puff):
     def __init__(self, name: str, data: Sequence[int|float], databuff: list[int], owner: int, types: list[DamageType], level=0):
@@ -442,6 +489,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         if context2[_].types[0].type == "Support" or context2[_].types[1].type == "Support":
             support2.append(_)
     def perform_attack(attacker, defender, attacker_context, defender_context, attacker_support, attacker_ranged, defender_tank, attacker_pos, events):
+        if attacker.can_attack == False: return
         if DEBUG:
             print(f"{attacker.name} ({attacker.health}) vs {defender.name} ({defender.health})\nOpponent: {attacker.owner} vs {defender.owner}")
         chance = randint(1, 100)
@@ -453,8 +501,11 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             if result != "": events.append(result)
         # Crit calculation
         attack += attacker.attack
+        result = attack.use_special_ability("special_attack", attacker_context, attacker, defender_context, defender)
+        if result != "": events.append(result)
         if chance <= attacker.critChance:
             attack *= (attacker.critDmg * .10 + 1)
+            puff2.eval_attack("crit") # Checks for effects to activate
             events.append(f"{attacker.name} crits {defender.name} for {round(attack,1 )} damage!")
         # Ranged support
         for rangedpuff in range(len(attacker_ranged)):
