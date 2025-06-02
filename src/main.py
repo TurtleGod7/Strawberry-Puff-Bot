@@ -2436,10 +2436,6 @@ async def checkMessage(message: discord.Message):
     relevant details. This parameter is used to check the content of the message and add reactions
     based on specific keywords or phrases found in the message
     '''
-    if "i hate" in message.content.lower():
-        await message.add_reaction("👎")
-        await message.add_reaction("❌")
-        return
     if "skater puff" in message.content.lower():
         await message.add_reaction("<:skater:1345246453911781437>")
     if "demon puff" in message.content.lower():

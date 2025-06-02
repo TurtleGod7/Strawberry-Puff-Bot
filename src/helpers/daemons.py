@@ -6,7 +6,6 @@ from atexit import register
 from ctypes import windll
 from subprocess import Popen
 from pathlib import Path
-
 class BannedUsersHandler:
     def __init__(self, db_name="users.db", interval=1800):
         # Resolve path to: src/assets/database/users.db
@@ -59,7 +58,8 @@ class SleepPrevention:
     def __init__(self):
         """Initialize the command shell to not let the system sleep."""
         self.sleep_proc = None
-        self._start_commit_thread()
+        from helpers.flags import SLEEP_PREVENTION
+        if SLEEP_PREVENTION: self._start_commit_thread()
 
     def _prevent_sleep(self):
         """Prevent system from sleeping depending on OS."""

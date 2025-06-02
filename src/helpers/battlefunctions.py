@@ -290,7 +290,7 @@ class LineupPuff(Puff):
         self.trueDefensebuff = f"{databuff[6]:+}"
 
 
-def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, str], forlineupfunc: bool=False) -> tuple[Sequence[Puff|LineupPuff], dict[str, str]]:
+def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, str]={}, forlineupfunc: bool=False) -> tuple[Sequence[Puff|LineupPuff], dict[str, str]]:
     """
     The function `get_puffs_for_battle` retrieves puff data from a database, adjusts stats based on user
     level, and returns a list of Puff objects.
@@ -377,6 +377,29 @@ def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, s
     for puff in final_data:
         puff.use_special_ability("lineup_based_buff", final_data, puff)
     return final_data, buffs
+
+def roguelite_get_info(puff_name: str) -> tuple[list, list]:
+    """
+    The function `roguelite_get_info` retrieves information about a specific puff from a database and
+    returns its stats and types.
+
+    :param puff_name: The `puff_name` parameter is a string that represents the name of the puff for
+    which you want to retrieve information from the database. It is used to query the database and
+    fetch the corresponding stats and types for that specific puff
+    :return: The function `roguelite_get_info` returns a tuple containing two tuples. The first tuple
+    contains the stats of the specified puff, while the second tuple contains the types associated with
+    that puff.
+    """
+    conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT stats, types FROM puffs WHERE name = ?", (puff_name,))
+    data: tuple = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    data[0].split(";"); data[1].split(";")
+    for type in data[1]: type = typeChart[type]()
+    if len(data[1]) == 1: data[1].append(BlankDamage())
+    return data
 
 def get_lineup(user_id: int):
     """
@@ -510,8 +533,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         # Ranged support
         for rangedpuff in range(len(attacker_ranged)):
             if attacker == attacker_context[attacker_ranged[rangedpuff]]: continue
-            calcattack = attacker_context[attacker_ranged[rangedpuff]].attack * (.9 + (.1 * (attacker_ranged[rangedpuff] - attacker_pos)))
-            if chance <= attacker_context[attacker_ranged[rangedpuff]].critChance:
+            calcattack = attacker_context[attacker_ranged[rangedpuff]].attack * (.8 + (.1 * (attacker_ranged[rangedpuff] - attacker_pos)))# Base attack + 10% for each pos away
+            if chance <= (attacker_context[attacker_ranged[rangedpuff]].critChance)-5*(attacker_ranged[rangedpuff] - attacker_pos):# checks crit, reduces by 5 for each pos away
                 calcattack = calcattack * (attacker_context[attacker_ranged[rangedpuff]].critDmg * .10 + 1)
                 events.append(f"{attacker_context[attacker_ranged[rangedpuff]].name} crits {defender.name} for {round(calcattack,1 )} damage with ranged support!")
             attack += calcattack
@@ -580,3 +603,166 @@ def finalize_battle(winner: int, loser: int) -> None:
     conn.commit()
     cursor.close()
     conn.close()
+
+ROGUELITE_MODIFIERS = {
+    "Volcanic": {"description": "All puffs take 5% max HP damage per turn", "effect": "health_multiplier 0.95"},
+    "Critical Boost": {"description": "+50% crit damage but -30% defense", "effect": "crit_damage 1.5 defense 0.7"},
+    "Tank Meta": {"description": "Tank-type puffs gain +40% HP", "effect": "tank_health 1.4"},
+    "Glass Cannon": {"description": "Attack doubled but HP halved", "effect": "attack 2.0 health 0.5"},
+}
+
+class RogueliteRun:
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+        self.floor = 1
+        self.health = 100
+        self.shards = 0
+        self.modifiers: list[str] = []
+        self.buffs: dict[str, float] = {}
+        self.lineup: list[str] = []
+        
+    def apply_modifier(self, modifier: str):
+        """Parse and apply modifier effects"""
+        effects = ROGUELITE_MODIFIERS[modifier]["effect"].split()
+        for i in range(0, len(effects), 2):
+            stat = effects[i]
+            value = float(effects[i+1])
+            self.buffs[stat] = value
+
+    def calculate_damage(self, base_damage: float) -> float:
+        """Apply all buffs to damage calculation"""
+        modified = base_damage
+        if 'attack' in self.buffs:
+            modified *= self.buffs['attack']
+        if 'crit_damage' in self.buffs:
+            modified *= self.buffs['crit_damage']
+        return modified
+
+    def save_to_db(self):
+        """Save current run state to database"""
+        conn = connect("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            REPLACE INTO roguelite_runs 
+            (user_id, floor, health, shards, modifiers, buffs, lineup)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                self.user_id,
+                self.floor,
+                self.health,
+                self.shards,
+                ";".join(self.modifiers),
+                ";".join(f"{k}_{v}" for k,v in self.buffs.items()),
+                ";".join(self.lineup)
+            ))
+        conn.commit()
+        cursor.close()
+
+def initialize_roguelite_run(user_id: int) -> RogueliteRun:
+    """Start a new roguelite run with base lineup"""
+    run = RogueliteRun(user_id)
+    
+    # Get user's regular lineup
+    base_lineup = get_lineup(user_id)
+    run.lineup = base_lineup[:5]  # First 5 puffs
+    
+    # Add initial modifier every 5 floors
+    if run.floor % 5 == 0:
+        modifier = choice(list(ROGUELITE_MODIFIERS.keys()))
+        run.modifiers.append(modifier)
+        run.apply_modifier(modifier)
+    
+    run.save_to_db()
+    return run
+
+PRESET_LINEUPS = {
+    0: [  # Tier 0 (floors 0–4)
+        ["Normal Puff", "Normal Puff", "Normal Puff"],
+        ["Tarantula Puff", "Normal Puff", "Ice Cream Puff"]
+    ],
+    1: [  # Tier 1 (floors 5–9)
+        ["Infected Puff", "Ice Cream Puff", "Rectangle Puff", "Normal Puff"],
+        ["Tarantula Puff", "Infected Puff", "Normal Puff", "Ice Cream Puff"]
+    ],
+    2: [  # Tier 2 (floors 10–14)
+        ["Rectangle Puff", "Tarantula Puff", "Infected Puff", "Ice Cream Puff", "Normal Puff"]
+        # Add more good synergies here...
+    ],
+    # ...
+}
+
+def generate_roguelite_opponent(run: RogueliteRun) -> dict:
+    tier = run.floor // 5
+    lineup_pool = PRESET_LINEUPS.get(tier, PRESET_LINEUPS[max(PRESET_LINEUPS)])  # Fallback to highest tier
+    chosen_lineup = choice(lineup_pool)
+
+    scaled_puffs = []
+    for name in chosen_lineup:
+        base_stats, types = roguelite_get_info(name)
+        scaled_stats = [s * (1 + 0.2 * tier) for s in base_stats]
+        scaled_puffs.append(
+            Puff(
+                name=name,
+                data=scaled_stats,
+                owner=0,
+                types=types,
+                level=tier
+            )
+        )
+    
+    return {
+        "lineup": scaled_puffs,
+        "description": f"Floor {run.floor} AI Opponent (Tier {tier})",
+        "modifiers": run.modifiers
+    }
+
+
+def process_roguelite_battle(player_puffs: Sequence[Puff | LineupPuff], ai_puffs: Sequence[Puff | LineupPuff], run: RogueliteRun) -> dict:
+    """Run a battle and return results"""
+    battle_log = []
+    player_health_start = sum(p.health for p in player_puffs)
+    
+    # Simulate battle rounds
+    for p1, p2 in zip(player_puffs, ai_puffs):
+        result, player_puffs, ai_puffs = battle(p1, p2, player_puffs, ai_puffs)
+        battle_log.extend(result)
+    
+    # Calculate damage taken
+    player_health_end = sum(p.health for p in player_puffs)
+    damage_taken = player_health_start - player_health_end
+    
+    # Apply floor modifiers
+    for modifier in run.modifiers:
+        if "Volcanic" in modifier:
+            damage_taken += sum(p.health * 0.05 for p in player_puffs)
+
+    return {
+        "log": battle_log,
+        "damage_taken": int(damage_taken),
+        "victory": sum(x for x in battle_log if isinstance(x, int)) >= 0
+    }
+
+def calculate_shard_reward(floor: int) -> int:
+    """Calculate currency reward based on floor"""
+    base = floor * 10
+    bonus = floor ** 1.5
+    return int(base + bonus)
+
+def get_available_upgrades(user_id: int) -> list[dict]:
+    """Get upgrades available for purchase"""
+    return [
+        {
+            "id": 1,
+            "name": "Reinforced Armor",
+            "cost": 50,
+            "effect": "Adds +10% base HP to all puffs",
+            "type": "permanent"
+        },
+        {
+            "id": 2,
+            "name": "Crit Boost",
+            "cost": 75,
+            "effect": "+15% critical hit chance",
+            "type": "temporary"
+        }
+    ]
