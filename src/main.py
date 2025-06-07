@@ -1,5 +1,5 @@
 from calendar import c
-from os import getenv, path
+from os import error, getenv, path, write
 from sys import platform
 from random import choices
 from sqlite3 import Connection, connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
@@ -56,6 +56,7 @@ rareColors: dict[int, discord.Color] = {
 activity_task_running = False
 puff_list: list[str] = []#; daemons.PuffRetriever(global_var=puff_list)
 banned_users: dict[int, float] = {}
+error_log_file: str = ""
 ###
 # Note: Discord will print information in embeds differently if it was a multi-line string compared to a normal string. Sorry about the readability issues :(
 
@@ -310,7 +311,7 @@ def shorten_message(message: str, user: int) -> str:
     }
     override = 0
     if len(message) >= 1024: override = 1
-    base_dir = Path(__file__).resolve().parent  # goes from src/helpers -> src
+    base_dir = Path(__file__).resolve().parent  # goes from src/main.py -> src
     db_path = str(base_dir / "assets" / "database" / "users.db")  # goes from src -> assets/database/users.db
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
@@ -329,6 +330,18 @@ def shorten_message(message: str, user: int) -> str:
         message = sub(pattern, keywords[phrase], message)
 
     return message
+
+def write_to_error_log(error: str, print_to_console: bool) -> None:
+    """
+    The function `write_to_error_log` writes an error message to a log file with a timestamp.
+
+    :param error: The `error` parameter is a string that represents the error message or exception
+    that you want to log
+    :type error: str
+    """
+    if print_to_console: print(error)
+    with open(error_log_file, "a") as f:
+        f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - ERROR:\n {error}")  # type: ignore
 
 @bot.event
 async def on_ready():
@@ -377,17 +390,19 @@ async def on_ready():
     if flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stats (
-            "username"	INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "rolls"	INTEGER DEFAULT 0,
-            "limited"	INTEGER DEFAULT 0,
-            "gold"	rolls INTEGER DEFAULT 0,
-            "purple"	INTEGER DEFAULT 0,
-            "rolledGolds"	TEXT DEFAULT NULL,
-            "rolledNormals"	TEXT DEFAULT NULL,
-            "avgPity"	REAL DEFAULT 0,
-            "win"	INTEGER DEFAULT 0,
-            "loss"	INTEGER DEFAULT 0,
-            "totalBattles"	INTEGER DEFAULT 0,
+            "username" PRIMARY KEY INTEGER NOT NULL UNIQUE,
+            "rolls"	INTEGER NOT NULL DEFAULT 0,
+            "limited" INTEGER NOT NULL DEFAULT 0,
+            "gold" INTEGER NOT NULL DEFAULT 0,
+            "purple" INTEGER NOT NULL DEFAULT 0,
+            "rolledGolds" TEXT DEFAULT NULL,
+            "rolledNormals" TEXT DEFAULT NULL,
+            "pity" INTEGER NOT NULL DEFAULT 0,
+            "avgPity" REAL NOT NULL DEFAULT 0,
+            "win" INTEGER NOT NULL DEFAULT 0,
+            "loss" INTEGER NOT NULL DEFAULT 0,
+            "totalBattles" INTEGER NOT NULL DEFAULT 0,
+            "money" INTEGER NOT NULL DEFAULT 0,
         )
         """)
 
@@ -454,6 +469,16 @@ async def on_ready():
                     await bot.user.edit(banner=banner_img) # type: ignore
                 except Exception as e:
                     print(f'{e}')
+
+    dir = Path(__file__).resolve().parent.parent # goes from src/main.py -> project root
+    dir = str(dir / "logs")
+    global error_log_file
+    error_log_file = path.join(dir, f"{datetime.now().strftime('%Y-%m-%d') + '.log'}")
+    with open(error_log_file, "a") as f:
+        f.write(f"Bot started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Discord version: {discord.__version__}\n")
+        f.write(f"Admin Users: {ADMIN_USERS}\n")
+        f.write(f"Flags: DEBUG={flags.DEBUG}, TABLE_CREATION={flags.TABLE_CREATION}, STOP_PING_ON_STARTUP={flags.STOP_PING_ON_STARTUP}\n")
 
     print(f'Logged in as {bot.user}')
 
@@ -553,8 +578,8 @@ async def roll_a_puff(interaction: discord.Interaction):
         full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\n"
 
     embed.add_field(
-            name=":strawberry::turtle:" * 4 + ":strawberry:",
-            value=full_text
+        name=":strawberry::turtle:" * 4 + ":strawberry:",
+        value=full_text
     )
     embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
@@ -2472,17 +2497,33 @@ async def on_command_error(ctx, error):
     the error using `isinstance` to handle specific types of errors, such as `NotAdmin` and `BannedPlayerCtx`
     """
     if isinstance(error, NotAdmin):# Would only be for admin commands right now
-        print(f"{ctx.author.display_name}({ctx.author.id}) tried to use an admin command")
+        write_to_error_log(
+            f"Admin command error: {ctx.author.display_name}({ctx.author.id}) tried to use an admin command",
+            True,
+        )
     elif isinstance(error, BannedPlayerCtx):
         if flags.PRINT_EXTRA_ERROR_MESSAGES:
-            print(f"{ctx.author.display_name}({ctx.author.id}) tried to use the bot while banned")
+            write_to_error_log(
+                f"BannedPlayerCtx error: {ctx.author.display_name}({ctx.author.id}) tried to use the bot while banned",
+                True,
+            )
     elif isinstance(error, commands.errors.CommandNotFound):
         if flags.PRINT_EXTRA_ERROR_MESSAGES:
-            print(f"{ctx.author.display_name}({ctx.author.id}) tried to use a command that doesn't exist")
+            write_to_error_log(
+                f"CommandNotFound error: {ctx.author.display_name}({ctx.author.id}) tried to use a command that doesn't exist",
+                True,
+            )
     elif isinstance(error, commands.BadArgument):
         if flags.PRINT_EXTRA_ERROR_MESSAGES:
-            print(f"{ctx.author.display_name}({ctx.author.id}) provided an invalid argument for a command: {error}")
+            write_to_error_log(
+                f"BadArgument error: {ctx.author.display_name}({ctx.author.id}) provided an invalid argument for a command: {error}",
+                True,
+            )
     else:
+        write_to_error_log(
+            error,
+            False,
+        )
         raise error
 
 @bot.tree.error
@@ -2500,8 +2541,15 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     """
     if isinstance(error, BannedPlayer):
         if flags.PRINT_EXTRA_ERROR_MESSAGES:
-            print(f"{interaction.user.display_name}({interaction.user.id}) tried to use the bot while banned")
+            write_to_error_log(
+                f"BannedPlayer error: {interaction.user.display_name}({interaction.user.id}) tried to use the bot while banned",
+                True,
+            )
     else:
+        write_to_error_log(
+            error,
+            False,
+        )
         raise error
 
 @bot.event
@@ -2524,10 +2572,9 @@ async def on_error(event, *args, **kwargs):
     error_details = format_exc()
 
     if "ClientConnectorDNSError" in error_details:
-        print("Network error: Failed to reconnect to Discord!")
+        write_to_error_log("Network error: DNS resolution failed. Check your internet connection or Discord API status.", True)
     else:
-        print(f"🚨 Error in {event}:")
-        print(error_details)
+        write_to_error_log(error_details, True)
 
 # TODO: make the website
 ### All of the code that follows is for the bot startup to run ###
@@ -2573,4 +2620,4 @@ if __name__ == "__main__":
         pass  # Already handled in main()
     finally:
         loop.close()
-        print("✅ Clean shutdown complete")
+        print("✅ Clean shutdown complete\nAll errors have been logged and saved.")

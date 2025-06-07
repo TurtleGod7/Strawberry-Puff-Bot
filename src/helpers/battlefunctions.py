@@ -524,7 +524,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             if result != "": events.append(result)
         # Crit calculation
         attack += attacker.attack
-        result = attack.use_special_ability("special_attack", attacker_context, attacker, defender_context, defender)
+        result = attacker.use_special_ability("special_attack", attacker_context, attacker, defender_context, defender)
         if result != "": events.append(result)
         if chance <= attacker.critChance:
             attack *= (attacker.critDmg * .10 + 1)
