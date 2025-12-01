@@ -1,5 +1,4 @@
-from calendar import c
-from os import error, getenv, path, write
+from os import getenv, path
 from sys import platform
 from random import choices
 from sqlite3 import Connection, connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
