@@ -2431,6 +2431,21 @@ async def getmaxpity(ctx):
 
 @bot.command()
 @is_authorised_user()
+async def givemaxpity(ctx, arg: discord.User):
+    '''
+    give the maximum pity limit for the bot and sets it to the user's pity value in the database
+    '''
+    user_id = arg.id
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE stats SET pity = " + str(flags.PITY_LIMIT) + " WHERE username = ?", (user_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    await ctx.send(f"Pity for {arg.display_name} has been set to the maximum limit of {flags.PITY_LIMIT}.")
+
+@bot.command()
+@is_authorised_user()
 async def devdocs(ctx):
     """
     This function sends a Discord embed message containing information about developer documentation and
@@ -2447,6 +2462,10 @@ async def devdocs(ctx):
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
+# @bot.command()
+# @is_authorised_user()
+# async def help(ctx):
+#     await devdocs(ctx)
 ### All the functions below this comment are to catch errors (or are coro args) ###
 
 async def checkMessage(message: discord.Message):
