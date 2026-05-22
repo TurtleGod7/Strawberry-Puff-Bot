@@ -11,7 +11,7 @@ effectivenessChart: dict[str, dict[str, float]] = {
     "Ranged": {"Melee": -.25, "Ranged": 0, "Magic": .25, "Support": 0, "Tank": -.25},
     "Magic": {"Melee": .25, "Ranged": -.25, "Magic": 0, "Support": .25, "Tank": -.25},
     "Support": {"Melee": 0, "Ranged": 0, "Magic": -.25, "Support": 0, "Tank": -.25},
-    "Tank": {"Melee": -.25, "Ranged": -.25, "Magic": -.25, "Support": -.25, "Tank": 0}
+    "Tank": {"Melee": -.25, "Ranged": -.25, "Magic": -.25, "Support": -.25, "Tank": -.25}
 }
 
 foodChart: dict[str, list[list[int]]] = {
@@ -181,8 +181,26 @@ def terrors_from_the_shadow(self, puff_list, current_puff, otarget, ocurrent_puf
     if chance <= 30: isActive = True
     elif chance <= 50 and self.name == "... ... ... .........": isActive = True
     if isActive:
-        otarget.effects.append({"name":"stunned", "lifetime" : 2 if self.name == "... ... ... ........." else 1, "scenario": ["crit"]})
-        return f"{self.name} brings terrors from the shadow, stunning {self.name}"
+        ocurrent_puff.effects.append({"name":"stunned", "lifetime" : 2 if self.name == "... ... ... ........." else 1, "scenario": ["crit"]})
+        return f"{self.name} brings terrors from the shadow, stunning {ocurrent_puff.name}"
+    else: return ""
+
+def rizzy(self, puff_list, current_puff, otarget, ocurrent_puff):
+    team_support = 0
+    for puff in puff_list:
+        if puff.types[0].type == "Support" or puff.types[1].type == "Support":
+            team_support += 1
+    chance = randint(1, 100)
+    isActive = False
+    if chance <= 25: isActive = True
+    if isActive:
+        puffs_affected = []
+        ocurrent_puff.defense -= 5
+        puffs_affected.append(ocurrent_puff.name)
+        for puff in range(2):
+            otarget[puff].defense -= (7.5-(puff+1)*2.5)
+            puffs_affected.append(otarget[puff].name)
+        self.trueDefense -= (max(5 - team_support * 2,0))
     else: return ""
 
 SPECIAL_ABILITIES = {
@@ -207,6 +225,15 @@ SPECIAL_ABILITIES = {
     "Angel Puff": {
         "buff": heavenly_boon,
     },
+    "Creepy Puff": {
+        "special_attack": terrors_from_the_shadow,
+    },
+    "... ... ... .........": {
+        "special_attack": terrors_from_the_shadow,
+    },
+    "Rizz Puff": {
+        "special_attack": rizzy,
+    }
 }
 
 typeChart = {
@@ -487,8 +514,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
     """
     events = []
     events.extend(["--------------",f"**Battle**: {puff1.name} vs {puff2.name}"])
-    if puff2.health <= 0: return [f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1], context1, context2
-    if puff1.health <= 0: return [f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1], context1, context2
+    if puff2.health <= 0: return [f"{puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1], context1, context2
+    if puff1.health <= 0: return [f"{puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1], context1, context2
     tank1: list[int] = []
     tank2: list[int] = []
     ranged1: list[int] = []
@@ -511,6 +538,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             ranged2.append(_)
         if context2[_].types[0].type == "Support" or context2[_].types[1].type == "Support":
             support2.append(_)
+    
     def perform_attack(attacker, defender, attacker_context, defender_context, attacker_support, attacker_ranged, defender_tank, attacker_pos, events):
         if attacker.can_attack == False: return
         if DEBUG:
@@ -549,7 +577,6 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             except: continue
         attack = attack * (1 + typeBuff)
         # Tank mechanics
-        # Tank mechanics refactored to reduce repetition
         tanks_to_hit = []
         if len(defender_tank) > 0 and (defender.types[0].type != "Tank" or defender.types[1].type != "Tank"):
             attack_split = attack / (len(defender_tank) + 1)
@@ -576,18 +603,16 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         )
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
+        puff1.use_special_ability("revive", context1, puff1)
+        puff2.use_special_ability("revive", context2, puff2)
         if puff1.health <= 0 and puff2.health <= 0:
-            puff1.use_special_ability("revive", context1, puff1)
-            puff2.use_special_ability("revive", context2, puff2)
-            events.extend([f"⚔️ It's a draw! ({puff1.name} vs {puff2.name})", 0])
+            events.extend([f"It's a draw! ({puff1.name} vs {puff2.name})", 0])
             continue
-        if puff2.health <= 0:
-            puff2.use_special_ability("revive", context2, puff2)
-            events.extend([f"🏅 {puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1])
+        elif puff2.health <= 0:
+            events.extend([f"{puff1.name} wins! (Lvl {puff1.level}) - <@{puff1.owner}>", 1])
             continue
-        if puff1.health <= 0:
-            puff1.use_special_ability("revive", context1, puff1)
-            events.extend([f"🏅 {puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
+        elif puff1.health <= 0:
+            events.extend([f"{puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
             continue
     return events, context1, context2 # Catch all
     # Change to return a list of events that has happened with score at the end and the new context lists

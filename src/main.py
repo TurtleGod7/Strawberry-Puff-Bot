@@ -310,11 +310,11 @@ def shorten_message(message: str, user: int) -> str:
     }
     override = 0
     if len(message) >= 1024: override = 1
+    check_account(user)
     base_dir = Path(__file__).resolve().parent  # goes from src/main.py -> src
     db_path = str(base_dir / "assets" / "database" / "users.db")  # goes from src -> assets/database/users.db
     conn = get_db_connection(db_path)
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user,))
     cursor.execute("SELECT ShortenText FROM settings WHERE username = ?", (user,))
     data = cursor.fetchone()[0]
     cursor.close()
@@ -341,6 +341,26 @@ def write_to_error_log(error: str, print_to_console: bool) -> None:
     if print_to_console: print(error)
     with open(error_log_file, "a") as f:
         f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - ERROR:\n {error}")  # type: ignore
+
+def check_account(username: int) -> None:
+    """
+    The function `check_account` checks if a user account exists in the database and creates one if it
+    doesn't.
+
+    :param username: The `username` parameter is an integer that represents the unique identifier of a
+    user. It is used to check if the user's account exists in the database and to create an account for
+    the user if it does not already exist
+    :type username: int
+    """
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (username,))
+    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (username,))
+    cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (username,))
+    cursor.execute("INSERT OR IGNORE INTO items (username) VALUES (?)", (username,))
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 @bot.event
 async def on_ready():
@@ -498,17 +518,16 @@ async def roll_a_puff(interaction: discord.Interaction):
     # So Discord doesn't time out the interaction
 
     user_id = interaction.user.id
+    check_account(user_id)
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor() # All data will be retrieved here
-    # Checks Validity of records
-    cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (user_id,))
-    cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (user_id,))
     # Selects Pity and Rolled Data
     cursor.execute("SELECT pity,rolledGolds,rolledNormals FROM stats WHERE username = ?", (user_id,))
     pity, rolledGolds, rolledNormals = cursor.fetchone()
     # Gets Settings for Pingongold
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
+    reduceMsg = bool(cursor.execute("SELECT ReduceMsgSize FROM settings WHERE username = ?", (user_id,)).fetchone()[0])
     cursor.close()
     conn.close()
 
@@ -573,14 +592,18 @@ async def roll_a_puff(interaction: discord.Interaction):
             rarity_text_name = "gold" if isRare == 2 else "limited"
             emoji_text = ":yellow_square:" if isRare == 2 else "<:gray_square:1342727158673707018>"
             await dm_ping(user_id,f"you rolled a {rarity_text_name} rarity puff! {emoji_text}\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
+        if reduceMsg:
+            full_text = f"You got a **{name}**.\nYou rolled this puff at **{pity}** pity."
     else:
         full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\n"
+        if reduceMsg:
+            full_text = f"You got a **{name}**."
 
     embed.add_field(
         name=":strawberry::turtle:" * 4 + ":strawberry:",
         value=full_text
     )
-    embed.set_image(url=image_path)
+    if not reduceMsg: embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
 
     await interaction.followup.send(embed=embed)
@@ -598,10 +621,9 @@ async def get_pity(interaction: discord.Interaction):
     it is used to retrieve the user's ID to fetch
     :type interaction: discord.Interaction
     """
+    check_account(interaction.user.id)
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (interaction.user.id,))
-    conn.commit()
     cursor.execute("SELECT pity FROM stats WHERE username = ?", (interaction.user.id,))
     pity = cursor.fetchone()[0]
     cursor.close()
@@ -999,28 +1021,26 @@ class SettingsView(discord.ui.View):
         options=[
             discord.SelectOption(label="Notify you when the bot turns on", value="0", description="Enable or disable bot startup notifications."),
             discord.SelectOption(label="Notify you when you roll a Gold/Limited Rarity puff", value="1", description="Extremely useful when spamming"),
-            discord.SelectOption(label="Shorten long texts", value="2", description="Enable or disable text shortening for long descriptions")
+            discord.SelectOption(label="Shorten long texts", value="2", description="Enable or disable text shortening for long descriptions"),
+            discord.SelectOption(label="Shorten message size", value="3", description="Enable or disable message size shortening. **Removes** message content")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         value = int(select.values[0])
 
-        conn = get_db_connection("assets/database/users.db")
-        cursor = conn.cursor()
         settingsDict = {
             0: "DMonStartup",
             1: "PingonGold",
-            2: "ShortenText"
+            2: "ShortenText",
+            3: "ReduceMsgSize",
         }
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM settings WHERE username = ?)", (self.user_id,))
-        if cursor.fetchone()[0] == 0:
-            cursor.execute("INSERT INTO settings (username) VALUES (?)", (self.user_id,))
-            conn.commit()
-            new_value = 1 # Guarenteed to be 1 since the user is new
-        else:
-            cursor.execute(f"SELECT {settingsDict.get(value)} FROM settings WHERE username = ?", (self.user_id,))
-            current_value = cursor.fetchone()[0]
-            new_value = current_value ^ 1
+        check_account(self.user_id)
+        # else:
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT {settingsDict.get(value)} FROM settings WHERE username = ?", (self.user_id,))
+        current_value = cursor.fetchone()[0]
+        new_value = current_value ^ 1
 
         cursor.execute(f"UPDATE settings SET {settingsDict.get(value)} = ? WHERE username = ?", (new_value, self.user_id))
 
@@ -1759,11 +1779,10 @@ class LineupView(discord.ui.View):
         self.user_id = user_id
         self.display_name = display_name
         self.owned_puffs = battlefunctions.get_owned(self.user_id)
+        check_account(self.user_id)
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (self.user_id,))
-        conn.commit()
-        cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (user_id,))
+        cursor.execute("SELECT food FROM pvp_lineup WHERE username = ?", (self.user_id,))
         self.food = unpack_info(cursor.fetchone()[0], True, False)
         cursor.close()
         conn.close()
@@ -1935,11 +1954,9 @@ class ShopView(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
         self.user_id = user_id
+        check_account(self.user_id)
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO stats (username) VALUES (?)", (self.user_id,))
-        cursor.execute("INSERT OR IGNORE INTO items (username) VALUES (?)", (self.user_id,))
-        conn.commit()
         # Fetch user's money from the database
         cursor.execute("SELECT money FROM stats WHERE username = ?", (self.user_id,))
         self.money = cursor.fetchone()[0]
