@@ -61,7 +61,7 @@ error_log_file: str = ""
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True)
+bot = commands.Bot(command_prefix="!", intents=intents, reconnect=True, help_command=None)
 
 if flags.DEBUG:
     print(f"Values in puff_list: {puff_list}")
@@ -1898,8 +1898,8 @@ async def puff_name_autocomplete(interaction: discord.Interaction, current: str)
         print(f"First few puffs in puff_list {puff_list[:5]}")
     choices= [
         discord.app_commands.Choice(name=puff, value="_".join(puff.split(" ")))
-        for puff in puff_list
-        if current.lower() in puff[0].lower()]
+        for puff in puff_list if current.lower() in puff.lower()
+    ]
     if flags.DEBUG:
         for choice in choices:
             print(f"Choice: name='{choice.name}', value='{choice.value}'")
@@ -2479,10 +2479,12 @@ async def devdocs(ctx):
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-# @bot.command()
-# @is_authorised_user()
-# async def help(ctx):
-#     await devdocs(ctx)
+@bot.command()
+async def help(ctx):
+    if ctx.author.id in ADMIN_USERS:
+        await devdocs(ctx)
+    else:
+        await ctx.send("Use `/help` to see the user commands!")
 ### All the functions below this comment are to catch errors (or are coro args) ###
 
 async def checkMessage(message: discord.Message):
@@ -2617,7 +2619,7 @@ async def main():
     try:
         await bot.start(TOKEN) # type: ignore
     except KeyboardInterrupt:
-        print("\n🛑 Received shutdown signal - terminating gracefully...")
+        print("\nReceived shutdown signal - terminating gracefully...")
         await bot.close()
     finally:
         # Cancel all remaining tasks
@@ -2655,4 +2657,4 @@ if __name__ == "__main__":
         pass  # Already handled in main()
     finally:
         loop.close()
-        print("✅ Clean shutdown complete\nAll errors have been logged and saved.")
+        print("All errors have been logged and saved.")

@@ -509,7 +509,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
     :type puff2: Puff
     :return: The `battle` function returns a tuple containing a message indicating the outcome of the
     battle and an integer value representing the result. The message can be one of the following:
-    - If both `puff1` and `puff2` have health less than or equal to 0, it returns "⚔️ It's a draw!
+    - If both `puff1` and `puff2` have health less than or equal to 0, it returns "It's a draw!
     (puff1.name vs puff2.name)"
     """
     events = []
