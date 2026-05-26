@@ -25,7 +25,7 @@ BANNER_START = "5/2/2025"
 BANNER_END = "6/1/2025"
 IMAGE_PATH = f"https://raw.githubusercontent.com/{GIT_USERNAME}/{GIT_REPO}/refs/heads/main/src/assets/"
 RARITY_WEIGHTS = [.887, .083, .03]
-LIMITED_WEIGHTS = [.8, .2]
+LIMITED_WEIGHTS = [.9, .1]
 STATUSES = [
     Activity(
         type=ActivityType.playing,

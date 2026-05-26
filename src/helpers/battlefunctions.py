@@ -79,26 +79,26 @@ class BlankDamage(DamageType):
     def __init__(self):
         super().__init__("Blank")
 
-def heal(self, puff_list, current_puff):
+def heal(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     if self.health <= 0: return ""
     heal_amt = self.health * 0.75
     for puff in puff_list:
         puff.health += heal_amt
     return f"{self.name} heals the team for {round(heal_amt,1)} health!"
 
-def laziness(self, puff_list, current_puff):
+def laziness(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     buff_amt = self.attack * 0.25 + self.trueDefense
     current_puff.trueDefense += buff_amt
     current_puff.attack -= buff_amt * 0.5
     return f"{self.name} makes {current_puff.name} lazy, increasing their true defense by {round(buff_amt,1)} but reducing their attack by {round(buff_amt*0.5,1)}!"
 
-def its_just_a_feature(self, puff_list, current_puff):
+def its_just_a_feature(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     buff_amt = self.attack * 0.5 + self.defensePenetration * 0.5
     current_puff.defensePenetration += buff_amt
     current_puff.health -= buff_amt * 0.5
     return f"Programmer Puff found bugs in the code, increasing {current_puff.name}'s defense penetration by {round(buff_amt,1)}% reducing their health by {round(buff_amt*0.5,1)}!"
 
-def special_support(self, puff_list, current_puff):
+def special_support(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     count = 0
     check_list = ["Strawberry Puff", "Luna Puff", "`Progammer Puff`", "Painter Puff"]
     for puff in puff_list:
@@ -108,7 +108,7 @@ def special_support(self, puff_list, current_puff):
         return f"Skater Puff has a special bond with the team, doubling her defense!"
     else: return ""
 
-def tank_outer_shell(self, puff_list, current_puff):
+def tank_outer_shell(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     if self.health >= 0 or self.revivelikeactionscount >= 1: return ""
     self.health = self.healthorg * 0.25
     self.defense = 17
@@ -119,7 +119,7 @@ def tank_outer_shell(self, puff_list, current_puff):
     self.types[0] = MeleeDamage()
     return f"Tank Puff's outer shell has been blown off revealing their true form!"
 
-def united_kingdom(self, puff_list, current_puff):
+def united_kingdom(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     if self.health > self.healthorg * 0.5 or self.revivelikeactionscount >= 1: return ""
     health_sum = 0
     def_sum = 0
@@ -144,7 +144,7 @@ stat_boosts = {
         "trueDefense": 10
     }
 
-def heavenly_boon(self, puff_list, current_puff):
+def heavenly_boon(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     # Check and initialize attributes if they don't exist
     if not hasattr(self, "puffboost"):
         self.puffboost = None
@@ -203,6 +203,14 @@ def rizzy(self, puff_list, current_puff, otarget, ocurrent_puff):
         self.trueDefense -= (max(5 - team_support * 2,0))
     else: return ""
 
+def bomb(self, puff_list, current_puff, otarget, ocurrent_puff):
+    if self.health > 0: return ""
+    SafeDmg = current_puff.attack * current_puff.defensePenetration
+    DefendableDmg = (current_puff.attack - SafeDmg) * (1 - (otarget[-1].defense * .01))
+    attack = SafeDmg + DefendableDmg - otarget[-1].trueDefense
+    otarget[-1].health -= attack * 2
+    return f"H(e) Puff explodes, dealing {otarget[-1].health} damage to {otarget[-1].name}!"
+
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
         "buff": heal,
@@ -233,6 +241,9 @@ SPECIAL_ABILITIES = {
     },
     "Rizz Puff": {
         "special_attack": rizzy,
+    },
+    "H(e) Puff": {
+        "revive": bomb,
     }
 }
 
@@ -266,10 +277,8 @@ class Puff:
     def use_special_ability(self, attack_name: str, target: Sequence, current_puff, otarget: Sequence=[], ocurrent_puff=None) -> str:
         if self.special_abilities:
             ability = self.special_abilities.get(attack_name, None)
-            if ability and attack_name == "special_attack":
+            if ability:
                 return ability(self, target, current_puff, otarget, ocurrent_puff) # type: ignore
-            elif ability:
-                return ability(self, target, current_puff)
         return ""
 
     def eval_attack(self, scenario):
@@ -590,7 +599,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             for tank_idx in tanks_to_hit:
                 defender_context[tank_idx].health -= attack_split
                 if defender_context[tank_idx].health <= 0:
-                    defender_context[tank_idx].use_special_ability("revive", defender_context, defender_context[tank_idx])
+                    defender_context[tank_idx].use_special_ability("revive", defender_context, defender_context[tank_idx], attacker_context, attacker)
                     if defender_context[tank_idx].health <= 0: events.append(f"{defender_context[tank_idx].name} has fainted!")
         defender.health -= attack
 
@@ -603,8 +612,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         )
         if DEBUG:
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
-        puff1.use_special_ability("revive", context1, puff1)
-        puff2.use_special_ability("revive", context2, puff2)
+        puff1.use_special_ability("revive", context1, puff1, context2, puff2)
+        puff2.use_special_ability("revive", context2, puff2, context1, puff1)
         if puff1.health <= 0 and puff2.health <= 0:
             events.extend([f"It's a draw! ({puff1.name} vs {puff2.name})", 0])
             continue

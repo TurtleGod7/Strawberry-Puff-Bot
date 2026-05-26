@@ -2344,22 +2344,22 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     file = str(arg) + ".png"
     conn = get_db_connection("assets/database/puffs.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT name, description, isRare, stats, types FROM puffs WHERE imagepath = ?", (file,))
-    name, description, isRare, stats, types = cursor.fetchone()
+    cursor.execute("SELECT name, description, isRare, stats, types, weight FROM puffs WHERE imagepath = ?", (file,))
+    name, description, isRare, stats, types, weight = cursor.fetchone()
     cursor.execute("SELECT SUM(weight) FROM puffs WHERE isRare = ?", (isRare,))
-    rarityWeight = cursor.fetchone()[0]
+    rarityWeight = weight/cursor.fetchone()[0]
     cursor.close()
     conn.close()
 
     image_path = flags.IMAGE_PATH + f"puffs/{file}?=raw"
-    weightString = f"{rarityWeight*weightsMultipier.get(isRare)}%"
+    weightString = f"{rarityWeight*weightsMultipier.get(isRare)*100}%"
     if isRare >= 2:
-        weightString += f" and {weightsMultipier.get(isRare+2)}%"
+        weightString += f" and {weightsMultipier.get(isRare+2)*100}%"
 
     embed = discord.Embed(title="Puff Info", color=discord.Color.darker_grey())
     embed.add_field(name="Name", value=name, inline=False)
     embed.add_field(name="Description", value=description, inline=False)
-    embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
+    embed.add_field(name="Rarity", value=f"{'Limited' if isRare > 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     embed.add_field(name="Chance", value=weightString, inline=False)
     embed.add_field(name="Stats", value=f"Attacks: {stats.split(';')[0]} Health: {stats.split(';')[1]}", inline=False)
     embed.add_field(name="Types", value=f"{types.split(';')[0]}" + f" / {types.split(';')[1] if len(stats.split(';')) > 1 else ''}", inline=False)
