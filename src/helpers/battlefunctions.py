@@ -160,7 +160,6 @@ def heavenly_boon(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     # Choose a random puff and stat to boost
     choosen_puff = choice(puff_list)
     choosen_stat_name = choice(stat_names)
-    
 
     # Save previous value for reverting later
     self.prev_boost_value = getattr(choosen_puff, choosen_stat_name)
@@ -205,7 +204,7 @@ def rizzy(self, puff_list, current_puff, otarget, ocurrent_puff):
 
 def bomb(self, puff_list, current_puff, otarget, ocurrent_puff):
     if self.health > 0: return ""
-    SafeDmg = current_puff.attack * current_puff.defensePenetration
+    SafeDmg = current_puff.attack * (current_puff.defensePenetration*.01)
     DefendableDmg = (current_puff.attack - SafeDmg) * (1 - (otarget[-1].defense * .01))
     attack = SafeDmg + DefendableDmg - otarget[-1].trueDefense
     otarget[-1].health -= attack * 2
@@ -564,7 +563,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         result = attacker.use_special_ability("special_attack", attacker_context, attacker, defender_context, defender)
         if result != "": events.append(result)
         if chance <= attacker.critChance:
-            attack *= (attacker.critDmg * .10 + 1)
+            attack *= (attacker.critDmg * .01 + 1)
             puff2.eval_attack("crit") # Checks for effects to activate
             events.append(f"{attacker.name} crits {defender.name} for {round(attack,1 )} damage!")
         # Ranged support
@@ -572,10 +571,10 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             if attacker == attacker_context[attacker_ranged[rangedpuff]]: continue
             calcattack = attacker_context[attacker_ranged[rangedpuff]].attack * (.8 + (.1 * (attacker_ranged[rangedpuff] - attacker_pos)))# Base attack + 10% for each pos away
             if chance <= (attacker_context[attacker_ranged[rangedpuff]].critChance)-5*(attacker_ranged[rangedpuff] - attacker_pos):# checks crit, reduces by 5 for each pos away
-                calcattack = calcattack * (attacker_context[attacker_ranged[rangedpuff]].critDmg * .10 + 1)
+                calcattack = calcattack * (attacker_context[attacker_ranged[rangedpuff]].critDmg * .01 + 1)
                 events.append(f"{attacker_context[attacker_ranged[rangedpuff]].name} crits {defender.name} for {round(calcattack,1 )} damage with ranged support!")
             attack += calcattack
-        SafeDmg = attack * attacker.defensePenetration
+        SafeDmg = attack * (attacker.defensePenetration*.01)
         DefendableDmg = (attack - SafeDmg) * (1 - (defender.defense * .01))
         attack = SafeDmg + DefendableDmg - defender.trueDefense
         # Type effectiveness
@@ -603,6 +602,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
                     if defender_context[tank_idx].health <= 0: events.append(f"{defender_context[tank_idx].name} has fainted!")
         defender.health -= attack
 
+    round_count = 0
     while puff1.health > 0 and puff2.health > 0:
         perform_attack(
             puff1, puff2, context1, context2, support1, ranged1, tank2, pos1, events
@@ -614,6 +614,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             print(f"After a fight: Puff1: {puff1.health}, Puff2: {puff2.health}")
         puff1.use_special_ability("revive", context1, puff1, context2, puff2)
         puff2.use_special_ability("revive", context2, puff2, context1, puff1)
+        round_count += 1
         if puff1.health <= 0 and puff2.health <= 0:
             events.extend([f"It's a draw! ({puff1.name} vs {puff2.name})", 0])
             continue
@@ -623,6 +624,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         elif puff1.health <= 0:
             events.extend([f"{puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
             continue
+        else:
+            events.append(f"End of round {round_count}")
     return events, context1, context2 # Catch all
     # Change to return a list of events that has happened with score at the end and the new context lists
 
