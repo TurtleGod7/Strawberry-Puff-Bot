@@ -1,5 +1,5 @@
-cd ~
-cd "D:/all users/aks0302/code/discord/wendy-puff-bot"
+Set-Location ~
+Set-Location "D:/all users/aks0302/code/discord/wendy-puff-bot"
 .venv/Scripts/activate
-cd "src"
+Set-Location "src"
 python main.py

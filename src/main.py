@@ -588,10 +588,6 @@ async def roll_a_puff(interaction: discord.Interaction):
     if isRare >= 2:
         ascension_text = "is your first time getting this puff!" if table[name] == 0 else f"is your **{table[name]}**{numsuffix.get(table[name], 'th')} ascension"
         full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
-        if PingonGold is not None and PingonGold == 1:
-            rarity_text_name = "gold" if isRare == 2 else "limited"
-            emoji_text = ":yellow_square:" if isRare == 2 else "<:gray_square:1342727158673707018>"
-            await dm_ping(user_id,f"you rolled a {rarity_text_name} rarity puff! {emoji_text}\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
         if reduceMsg:
             full_text = f"You got a **{name}**.\nYou rolled this puff at **{pity}** pity."
     else:
@@ -606,7 +602,12 @@ async def roll_a_puff(interaction: discord.Interaction):
     if not reduceMsg: embed.set_image(url=image_path)
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
 
-    await interaction.followup.send(embed=embed)
+    message = await interaction.followup.send(embed=embed, wait=True)
+
+    if isRare >= 2 and PingonGold is not None and PingonGold == 1:
+            rarity_text_name = "gold" if isRare == 2 else "limited"
+            emoji_text = ":yellow_square:" if isRare == 2 else "<:gray_square:1342727158673707018>"
+            await dm_ping(user_id,f"you rolled a {rarity_text_name} rarity puff! {emoji_text}\nClick here to go to to message {message.jump_url}\n-# If you would like to change this setting please do `/settings` here or in any server with me in it.\n")
 
 @bot.tree.command(name="pity", description="What's my pity")
 @discord.app_commands.check(is_banned_user)
