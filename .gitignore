@@ -2,6 +2,7 @@
 .vscode
 *.db-*
 logs
+src/assets/database/users.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
