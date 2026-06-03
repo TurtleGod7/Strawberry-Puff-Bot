@@ -79,6 +79,79 @@ class BlankDamage(DamageType):
     def __init__(self):
         super().__init__("Blank")
 
+typeChart = {
+    "melee": MeleeDamage,
+    "ranged": RangedDamage,
+    "magic": MagicDamage,
+    "support": SupportDamage,
+    "tank": TankDamage
+}
+class Puff:
+    def __init__(self, name: str, data: Sequence[int|float], owner: int, types: list[DamageType], level=0):
+        self.name = name
+        self.level = level
+        self.owner = owner
+        self.types = types
+        self.attack = data[0]
+        self.health = data[1]
+        self.healthorg = self.health
+        self.critChance = data[2]
+        self.critDmg = data[3]
+        self.defense = data[4]
+        self.defensePenetration = data[5]
+        self.trueDefense = data[6]
+        self.special_abilities = SPECIAL_ABILITIES.get(name, {})
+        self.revivelikeactionscount = 0
+        self.effects: list[dict] = []  # Changed to list of dicts for effect tracking
+        self.can_attack = True
+
+    def give_effect(self, effect_name: str, lifetime: int, scenario: list[str]) -> None:
+        self.effects.append({"name": effect_name, "lifetime": lifetime, "scenario": scenario})
+
+    def use_special_ability(self, attack_name: str, target: Sequence, current_puff, otarget: Sequence=[], ocurrent_puff=None) -> str:
+        if self.special_abilities:
+            ability = self.special_abilities.get(attack_name, None)
+            if ability:
+                return ability(self, target, current_puff, otarget, ocurrent_puff) # type: ignore
+        return ""
+
+    def eval_attack(self, scenario):
+        """
+        Checks all effects in self.effects. If an effect matches the scenario,
+        applies its inline function and manages its lifetime.
+        """
+        # Define effect handlers inline
+        effect_handlers = {
+            "stunned": [lambda puff: setattr(puff, "can_attack", False)],
+            "poisoned": [
+                lambda puff: setattr(puff, "defense", puff.defense - 2),
+                lambda puff: setattr(puff, "health", puff.health - (puff.healthorg * 0.05 * .01 * (100 - puff.defense)))
+                ],
+        }
+
+        # Track effects to remove after processing
+        effects_to_remove = []
+
+        for effect in self.effects:
+            effect_name = effect.get("name", "blank")
+            lifetime = effect.get("lifetime", 0)
+
+            if scenario not in effect.get("scenario", []): continue
+            # Apply effect if handler exists
+            handlers = effect_handlers.get(effect_name, [])
+            for handler in handlers:
+                handler(self)
+
+            # Decrement lifetime
+            effect["lifetime"] = lifetime - 1
+
+            # Remove effect if lifetime is up
+            if effect["lifetime"] <= 0: effects_to_remove.append(effect)
+
+        # Remove expired effects
+        for effect in effects_to_remove: self.effects.remove(effect)
+        if not any(effect.get("name") == "stunned" for effect in self.effects): self.can_attack = True
+
 def heal(self, puff_list, current_puff, otarget=[], ocurrent_puff=[]):
     if self.health <= 0: return ""
     heal_amt = self.health * 0.75
@@ -139,7 +212,7 @@ stat_boosts = {
         "health": 10,
         "critChance": 30,
         "critDmg": 100,
-        "defense": 30,
+        "defense": 20,
         "defensePenetration": 30,
         "trueDefense": 10
     }
@@ -180,7 +253,7 @@ def terrors_from_the_shadow(self, puff_list, current_puff, otarget, ocurrent_puf
     if chance <= 30: isActive = True
     elif chance <= 50 and self.name == "... ... ... .........": isActive = True
     if isActive:
-        ocurrent_puff.effects.append({"name":"stunned", "lifetime" : 2 if self.name == "... ... ... ........." else 1, "scenario": ["crit"]})
+        ocurrent_puff.give_effect("stunned", 2 if self.name == "... ... ... ........." else 1, ["crit"])
         return f"{self.name} brings terrors from the shadow, stunning {ocurrent_puff.name}"
     else: return ""
 
@@ -209,6 +282,28 @@ def bomb(self, puff_list, current_puff, otarget, ocurrent_puff):
     attack = SafeDmg + DefendableDmg - otarget[-1].trueDefense
     otarget[-1].health -= attack * 2
     return f"H(e) Puff explodes, dealing {otarget[-1].health} damage to {otarget[-1].name}!"
+
+def silver_death(self, puff_list, current_puff, otarget, ocurrent_puff):
+    if not hasattr(self, "silver_death_used"):
+        self.silver_death_used = False
+    if self.silver_death_used: return ""
+    ocurrent_puff.give_effect("poisoned", 5, "beginning")
+    self.silver_death_used = True
+    return "Luna Khan Puff strikes with silver death, poisoning the enemy for 5 turns!"
+
+def luna_puff(self, puff_list, current_puff, otarget, ocurrent_puff):
+    # This is an example of a lineup based buff that checks the lineup for certain puffs and buffs accordingly
+    if not hasattr(self, "luna_boost_used"):
+        self.luna_boost_used = False
+    in_team = False
+    check_list = ["Luna Puff"]
+    for puff in puff_list:
+        if puff.name in check_list: in_team = True
+    if in_team and not self.luna_boost_used:
+        self.critChance += 10
+        self.luna_boost_used = True
+        return f"Luna Khan Puff found her warrior in the team, increasing her critical chance by 10%"
+    else: return ""
 
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
@@ -243,75 +338,12 @@ SPECIAL_ABILITIES = {
     },
     "H(e) Puff": {
         "revive": bomb,
+    },
+    "Luna Khan Puff": {
+        "special_attack": silver_death,
+        "lineuppowerup": luna_puff
     }
 }
-
-typeChart = {
-    "melee": MeleeDamage,
-    "ranged": RangedDamage,
-    "magic": MagicDamage,
-    "support": SupportDamage,
-    "tank": TankDamage
-}
-
-class Puff:
-    def __init__(self, name: str, data: Sequence[int|float], owner: int, types: list[DamageType], level=0):
-        self.name = name
-        self.level = level
-        self.owner = owner
-        self.types = types
-        self.attack = data[0]
-        self.health = data[1]
-        self.healthorg = self.health
-        self.critChance = data[2]
-        self.critDmg = data[3]
-        self.defense = data[4]
-        self.defensePenetration = data[5]
-        self.trueDefense = data[6]
-        self.special_abilities = SPECIAL_ABILITIES.get(name, {})
-        self.revivelikeactionscount = 0
-        self.effects: list[dict] = []  # Changed to list of dicts for effect tracking
-        self.can_attack = True
-
-    def use_special_ability(self, attack_name: str, target: Sequence, current_puff, otarget: Sequence=[], ocurrent_puff=None) -> str:
-        if self.special_abilities:
-            ability = self.special_abilities.get(attack_name, None)
-            if ability:
-                return ability(self, target, current_puff, otarget, ocurrent_puff) # type: ignore
-        return ""
-
-    def eval_attack(self, scenario):
-        """
-        Checks all effects in self.effects. If an effect matches the scenario,
-        applies its inline function and manages its lifetime.
-        """
-        # Define effect handlers inline
-        effect_handlers = {
-            "stunned": lambda puff: setattr(puff, "can_attack", False),
-            "poisoned": lambda puff: setattr(puff, "health", puff.health - 5)
-        }
-
-        # Track effects to remove after processing
-        effects_to_remove = []
-
-        for effect in self.effects:
-            effect_name = effect.get("name", "blank")
-            lifetime = effect.get("lifetime", 0)
-
-            if scenario not in effect.get("scenario", []): continue
-            # Apply effect if handler exists
-            handler = effect_handlers.get(effect_name)
-            if handler: handler(self)
-
-            # Decrement lifetime
-            effect["lifetime"] = lifetime - 1
-
-            # Remove effect if lifetime is up
-            if effect["lifetime"] <= 0: effects_to_remove.append(effect)
-
-        # Remove expired effects
-        for effect in effects_to_remove: self.effects.remove(effect)
-        if not any(effect.get("name") == "stunned" for effect in self.effects): self.can_attack = True
 
 class LineupPuff(Puff):
     def __init__(self, name: str, data: Sequence[int|float], databuff: list[int], owner: int, types: list[DamageType], level=0):
@@ -551,10 +583,12 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         if attacker.can_attack == False: return
         if DEBUG:
             print(f"{attacker.name} ({attacker.health}) vs {defender.name} ({defender.health})\nOpponent: {attacker.owner} vs {defender.owner}")
+        defender.eval_attack("beginning") # Checks for effects to activate at the beginning of the turn 
         chance = randint(1, 100)
         attack = 0
         typeBuff = 0
         # Support buffs
+        attacker.use_special_ability("lineuppowerup", attacker_context, attacker)
         for puff in attacker_support:
             result = attacker_context[puff].use_special_ability("buff", attacker_context, attacker)
             if result != "": events.append(result)
@@ -564,7 +598,7 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         if result != "": events.append(result)
         if chance <= attacker.critChance:
             attack *= (attacker.critDmg * .01 + 1)
-            puff2.eval_attack("crit") # Checks for effects to activate
+            defender.eval_attack("crit") # Checks for effects to activate
             events.append(f"{attacker.name} crits {defender.name} for {round(attack,1 )} damage!")
         # Ranged support
         for rangedpuff in range(len(attacker_ranged)):

@@ -4,16 +4,17 @@ Strawberry Puff Bot is a feature-rich Discord gacha bot where you can collect, u
 
 ## Current Banner
 
-![Latest Banner](src/assets/profile/banner_tank.gif)
+![Latest Banner](src/assets/profile/banner_luna-khan.png)
 
 ## Features
 
-- 🎲 **Roll for Puffs:** Collect random puffs of varying rarities and abilities.
-- 📊 **Track & Compare Stats:** View your collection progress and compare with other users.
-- ⚔️ **PvP Battles & Lineups:** Build lineups and battle friends using unique puff skills.
-- 🛒 **Shop & Feed:** Buy items and feed your puffs to boost their power.
-- ⚙️ **Customizable Settings:** Adjust notifications, preferences, and get help—all in one place.
-- ✨ **Ongoing Updates:** New features and puffs added regularly!
+- **Roll for Puffs:** Collect random puffs of varying rarities and abilities.
+- **Track & Compare Stats:** View your collection progress and compare with other users.
+- **PvP Battles & Lineups:** Build lineups and battle friends using unique puff skills.
+- **Shop & Feed:** Buy items and feed your puffs to boost their power.
+- **Customizable Settings:** Adjust notifications, preferences, and get help—all in one place.
+- **Ongoing Updates:** New features and puffs added regularly!
+  - <small>PS I'm working on a graphics overhaul and battling overhaul</small>
 
 ## Bot Info
 
