@@ -515,7 +515,6 @@ async def roll_a_puff(interaction: discord.Interaction):
     any options or data provided by the user
     :type interaction: discord.Interaction
     """
-    await interaction.response.defer()
     # So Discord doesn't time out the interaction
 
     user_id = interaction.user.id
@@ -539,9 +538,10 @@ async def roll_a_puff(interaction: discord.Interaction):
         last_used = puffrollCooldown
         if current_time - last_used < flags.PUFFROLL_COOLDOWN_TIME:
             remaining_time = flags.PUFFROLL_COOLDOWN_TIME - (current_time - last_used)
-            await interaction.followup.send(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
+            await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             return
 
+    await interaction.response.defer()
     if int(pity) < flags.PITY_LIMIT:
         isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
     else: isRareval = 2  # When pity hits, it guarantees a gold or limited roll
