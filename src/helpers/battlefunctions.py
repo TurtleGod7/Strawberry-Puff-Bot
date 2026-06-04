@@ -305,6 +305,9 @@ def luna_puff(self, puff_list, current_puff, otarget, ocurrent_puff):
         return f"Luna Khan Puff found her warrior in the team, increasing her critical chance by 10%"
     else: return ""
 
+def cough(self, puff_list, current_puff, otarget, ocurrent_puff):
+    return f"{self.name} coughs"
+
 SPECIAL_ABILITIES = {
     "Fairy Puff": {
         "buff": heal,
@@ -341,7 +344,10 @@ SPECIAL_ABILITIES = {
     },
     "Luna Khan Puff": {
         "special_attack": silver_death,
-        "lineuppowerup": luna_puff
+        "lineup_based_buff": luna_puff
+    },
+    "Coughing Baby Puff": {
+        "special_attack": cough
     }
 }
 
@@ -588,7 +594,6 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
         attack = 0
         typeBuff = 0
         # Support buffs
-        attacker.use_special_ability("lineuppowerup", attacker_context, attacker)
         for puff in attacker_support:
             result = attacker_context[puff].use_special_ability("buff", attacker_context, attacker)
             if result != "": events.append(result)

@@ -63,6 +63,8 @@ STATUSES = [
         state="Make sure to check the new banner out before it ends!",
     )
 ]
-COOLDOWN_TIME = 30  # Cooldown in seconds
+PUFFROLL_COST = 10
+PUFFROLL_COOLDOWN_TIME = 5  # Cooldown in seconds
+BATTLE_COOLDOWN_TIME = 30  # Cooldown in seconds
 MONEY_FROM_WIN = 5
 ###

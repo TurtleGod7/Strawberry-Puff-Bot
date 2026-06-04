@@ -442,7 +442,8 @@ async def on_ready():
         cursor.execute("""
         CREATE TABLE "cooldowns" (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "battle" INTEGER DEFAULT 0,
+            "battle" REAL DEFAULT 0,
+            "puffroll" REAL DEFAULT 0,
         )
         """)
 
@@ -497,7 +498,7 @@ async def on_ready():
         f.write(f"Bot started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Discord version: {discord.__version__}\n")
         f.write(f"Admin Users: {ADMIN_USERS}\n")
-        f.write(f"Flags: DEBUG={flags.DEBUG}, TABLE_CREATION={flags.TABLE_CREATION}, STOP_PING_ON_STARTUP={flags.STOP_PING_ON_STARTUP}\n")
+        f.write(f"Flags: DEBUG={flags.DEBUG}, TABLE_CREATION={flags.TABLE_CREATION}, PROFILE_UPDATE={flags.CHANGE_PROFILE}, STOP_PING_ON_STARTUP={flags.STOP_PING_ON_STARTUP}\n")
 
     print(f'Logged in as {bot.user}')
 
@@ -528,8 +529,18 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
     reduceMsg = bool(cursor.execute("SELECT ReduceMsgSize FROM settings WHERE username = ?", (user_id,)).fetchone()[0])
+    cursor.execute("SELECT puffrollCooldown FROM cooldowns WHERE username = ?", (user_id,))
+    puffrollCooldown = cursor.fetchone()[0]
     cursor.close()
     conn.close()
+
+    current_time = time()
+    if puffrollCooldown is not None:
+        last_used = puffrollCooldown
+        if current_time - last_used < flags.BATTLE_COOLDOWN_TIME:
+            remaining_time = flags.BATTLE_COOLDOWN_TIME - (current_time - last_used)
+            await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
+            return
 
     if int(pity) < flags.PITY_LIMIT:
         isRareval = choices([0,1,2], weights=flags.RARITY_WEIGHTS, k=1)[0]
@@ -576,7 +587,7 @@ async def roll_a_puff(interaction: discord.Interaction):
         )
     elif int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
-
+    cursor.execute("UPDATE cooldowns SET puffroll = ? WHERE username = ?", (current_time, user_id,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -1255,19 +1266,19 @@ class LineupSetupButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=flags.SETTINGS_EXPIRY)
 
-    @discord.ui.button(label="🛠️ Rearrange Lineup", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Rearrange Lineup", style=discord.ButtonStyle.primary)
     async def rearrange_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_lineups = battlefunctions.get_lineup(interaction.user.id)
         await interaction.response.edit_message(view=RearrangeDropdown(user_lineups))
         # Trigger rearrange function
 
-    @discord.ui.button(label="✨ Pick New Puffs", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Pick New Puffs", style=discord.ButtonStyle.success)
     async def select_puffs_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_puffs = battlefunctions.get_owned(interaction.user.id)
         await interaction.response.edit_message(view=PuffDropdown(user_puffs))
         # Trigger dropdown function
 
-    @discord.ui.button(label="🍔 Feed Puffs", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Feed Puffs", style=discord.ButtonStyle.secondary)
     async def buff_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_puffs = battlefunctions.get_owned(interaction.user.id)
         await interaction.response.edit_message(view=FeedPuffDropdown(user_puffs, interaction.user.id))
@@ -1372,7 +1383,7 @@ class RearrangeDropdown(discord.ui.View):
             rearrange_again_button = discord.ui.Button(label="🔁 Rearrange Again", style=discord.ButtonStyle.primary)
 
             async def rearrange_again_callback(interaction: discord.Interaction):
-                await interaction.response.edit_message(content="🔁 Let’s rearrange again!", view=RearrangeDropdown(self.lineup))
+                await interaction.response.edit_message(content="Rearrange again", view=RearrangeDropdown(self.lineup))
 
             rearrange_again_button.callback = rearrange_again_callback
 
@@ -1665,10 +1676,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
 
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
-    cursor.execute(f"SELECT EXISTS(SELECT 1 FROM pvp_lineup WHERE username = ?)", (user_id,))
-    if cursor.fetchone()[0] == 0:
-        cursor.execute(f"INSERT INTO pvp_lineup (username) VALUES (?)", (user_id,))
-        conn.commit()
+    check_account(user_id)
 
     current_time = time()
     # Check if the user is on cooldown by querying the database
@@ -1678,8 +1686,8 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     conn.close()
     if result:
         last_used = result[0]
-        if current_time - last_used < flags.COOLDOWN_TIME:
-            remaining_time = flags.COOLDOWN_TIME - (current_time - last_used)
+        if current_time - last_used < flags.BATTLE_COOLDOWN_TIME:
+            remaining_time = flags.BATTLE_COOLDOWN_TIME - (current_time - last_used)
             await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             return
 
