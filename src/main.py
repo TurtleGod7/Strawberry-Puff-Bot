@@ -529,7 +529,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
     reduceMsg = bool(cursor.execute("SELECT ReduceMsgSize FROM settings WHERE username = ?", (user_id,)).fetchone()[0])
-    cursor.execute("SELECT puffrollCooldown FROM cooldowns WHERE username = ?", (user_id,))
+    cursor.execute("SELECT puffroll FROM cooldowns WHERE username = ?", (user_id,))
     puffrollCooldown = cursor.fetchone()[0]
     cursor.close()
     conn.close()
@@ -537,9 +537,9 @@ async def roll_a_puff(interaction: discord.Interaction):
     current_time = time()
     if puffrollCooldown is not None:
         last_used = puffrollCooldown
-        if current_time - last_used < flags.BATTLE_COOLDOWN_TIME:
-            remaining_time = flags.BATTLE_COOLDOWN_TIME - (current_time - last_used)
-            await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
+        if current_time - last_used < flags.PUFFROLL_COOLDOWN_TIME:
+            remaining_time = flags.PUFFROLL_COOLDOWN_TIME - (current_time - last_used)
+            await interaction.followup.send(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
             return
 
     if int(pity) < flags.PITY_LIMIT:

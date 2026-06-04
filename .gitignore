@@ -3,7 +3,7 @@
 logs
 src/assets/database/users.db
 .DS_Store
-*_pycache_/
+*_pycache_*/
 
 # Environments
 .env
