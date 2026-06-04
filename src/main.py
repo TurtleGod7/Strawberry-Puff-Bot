@@ -1953,7 +1953,7 @@ async def preview(interaction: discord.Interaction, puff: str):
     description, imagepath, isRare, stats, types, specials = puff_data
     embed = discord.Embed(title=f"Previewing {puff}", color=rareColors.get(isRare))
     embed.add_field(name="Info", value=f"{puff}\nIt is {description}")
-    embed.add_field(name="Rarity", value=f"{'Limited' if isRare >= 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
+    embed.add_field(name="Rarity", value=f"{'Limited' if isRare > 2 else 'Gold' if isRare == 2 else 'Purple' if isRare == 1 else 'Blue'}", inline=False)
     stats_message = shorten_message(
         f"Attack: {stats.split(';')[0]}\nHealth: {stats.split(';')[1]}\nCrit Chance: {stats.split(';')[2]}%\nCrit Damage: {stats.split(';')[3]}%\nDefense: {stats.split(';')[4]}%\nDefense Penetration: {stats.split(';')[5]}%\nTrue Defense: {stats.split(';')[6]}",
         interaction.user.id
