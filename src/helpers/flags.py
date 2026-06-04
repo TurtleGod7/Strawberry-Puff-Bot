@@ -64,7 +64,7 @@ STATUSES = [
     )
 ]
 PUFFROLL_COST = 10
-PUFFROLL_COOLDOWN_TIME = 5  # Cooldown in seconds
+PUFFROLL_COOLDOWN_TIME = 2.5  # Cooldown in seconds
 BATTLE_COOLDOWN_TIME = 30  # Cooldown in seconds
 MONEY_FROM_WIN = 5
 ###

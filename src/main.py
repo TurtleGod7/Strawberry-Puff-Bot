@@ -358,6 +358,7 @@ def check_account(username: int) -> None:
     cursor.execute("INSERT OR IGNORE INTO settings (username) VALUES (?)", (username,))
     cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (username,))
     cursor.execute("INSERT OR IGNORE INTO items (username) VALUES (?)", (username,))
+    cursor.execute("INSERT OR IGNORE INTO cooldowns (username) VALUES (?)", (username,))
     conn.commit()
     cursor.close()
     conn.close()
