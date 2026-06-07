@@ -63,8 +63,28 @@ STATUSES = [
         state="Make sure to check the new banner out before it ends!",
     )
 ]
-PUFFROLL_COST = 10
-PUFFROLL_COOLDOWN_TIME = 2.5  # Cooldown in seconds
+PUFFROLL_COST = 3
+PUFFROLL_COOLDOWN_TIME = 0  # Cooldown in seconds
 BATTLE_COOLDOWN_TIME = 30  # Cooldown in seconds
 MONEY_FROM_WIN = 5
+RUBIES_FROM_WIN = 3
+MAX_QUESTS = 2
+QUEST_CHALLENGES = [
+    {"index": 0, "description": "Win [placeholder] battle(s)", "reward": 4, "placeholder": 1},
+    {"index": 1, "description": "Use the shop", "reward": 2},
+    {"index": 2, "description": "Daily Check-In", "reward": 1},
+    {"index": 3, "description": "Spend [placeholder] clouds", "reward": 2, "placeholder": 5}
+]
+QUEST_CHECK_FUNCTIONS = [
+    lambda user, task: user.battle_won >= int(task[3]),
+    lambda user, task: user.shop_open > 0,
+    lambda user, task: __import__('datetime').datetime.fromtimestamp(user.checkinTime).date() == __import__('datetime').datetime.now().date(),
+    lambda user, task: user.clouds_spent >= int(task[3]),
+]
+QUEST_PROGRESS_FUNCTIONS = [
+    lambda user, task: f"{user.battle_won}/{int(task[3])} battles won",
+    lambda user, task: f"{user.shop_open} times opened",
+    lambda user, task: "Checked in today" if __import__('datetime').datetime.fromtimestamp(user.checkinTime).date() == __import__('datetime').datetime.now().date() else "Not checked in today",
+    lambda user, task: f"{user.clouds_spent}/{int(task[3])} clouds spent"
+]
 ###

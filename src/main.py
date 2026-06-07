@@ -1,11 +1,12 @@
 from os import getenv, path
 from sys import platform
 from random import choices
+from copy import deepcopy
 from sqlite3 import Connection, connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
-from math import ceil, floor
+from math import ceil, floor, exp
 from time import time, mktime
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from traceback import format_exc
 from pathlib import Path
 from re import escape, sub
@@ -134,7 +135,7 @@ def unpack_info(rollInfo: str, returndictempty: bool=False, checkint: bool=True)
     frequency = {}
     split_by_puffs = rollInfo.split(";")
     for split in split_by_puffs:
-        try: 
+        try:
             if checkint: frequency[split.split("_")[0]] = int(split.split("_")[1])
             else: frequency[split.split("_")[0]] = split.split("_")[1]
         except: continue
@@ -363,6 +364,9 @@ def check_account(username: int) -> None:
     cursor.close()
     conn.close()
 
+def sigmoid_scale(x: int|float, L: int|float, k: int|float, xz: int|float, d: int|float):
+    return L / (1 + exp(-k*(x-xz)))+d
+
 @bot.event
 async def on_ready():
     """
@@ -423,6 +427,8 @@ async def on_ready():
             "loss" INTEGER NOT NULL DEFAULT 0,
             "totalBattles" INTEGER NOT NULL DEFAULT 0,
             "money" INTEGER NOT NULL DEFAULT 0,
+            "rubies" INTEGER NOT NULL DEFAULT 30,
+            "excessAscension" INTEGER NOT NULL DEFAULT 0,
         )
         """)
 
@@ -441,20 +447,35 @@ async def on_ready():
         """)
 
         cursor.execute("""
-        CREATE TABLE "cooldowns" (
+        CREATE TABLE IF NOT EXISTS cooldowns (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "battle" REAL DEFAULT 0,
-            "puffroll" REAL DEFAULT 0,
+            "battle" REAL NOT NULL DEFAULT 0,
+            "puffroll" REAL NOT NULL DEFAULT 0,
         )
         """)
 
         cursor.execute("""
-        CREATE TABLE "banned_users" (
+        CREATE TABLE IF NOT EXISTS banned_users (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "time" INTEGER NOT NULL DEFAULT 0,
         )
         """)
 
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS log_on_info (
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
+            "streak" INTEGER NOT NULL DEFAULT 0,
+            "streakStart" REAL NOT NULL DEFAULT 0,
+            "maxStreak" INTEGER NOT NULL DEFAULT 0,
+            "tasks" TEXT DEFAULT NULL,
+            "lastGeneration" REAL NOT NULL DEFAULT 0,
+            "lastClaim" REAL NOT NULL DEFAULT 0,
+            "checkinTime" REAL NOT NULL DEFAULT 0,
+            "shopOpen" INTEGER NOT NULL DEFAULT 0,
+            "battleWon" INTEGER NOT NULL DEFAULT 0,
+            "cloudsSpent" INTEGER NOT NULL DEFAULT 0,
+        )
+        """)
         cursor.execute("PRAGMA journal_mode=WAL")
 
         conn.commit()
@@ -523,24 +544,30 @@ async def roll_a_puff(interaction: discord.Interaction):
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor() # All data will be retrieved here
     # Selects Pity and Rolled Data
-    cursor.execute("SELECT pity,rolledGolds,rolledNormals FROM stats WHERE username = ?", (user_id,))
-    pity, rolledGolds, rolledNormals = cursor.fetchone()
+    cursor.execute("SELECT pity,rolledGolds,rolledNormals, rubies FROM stats WHERE username = ?", (user_id,))
+    pity, rolledGolds, rolledNormals, rubies = cursor.fetchone()
     # Gets Settings for Pingongold
     cursor.execute("SELECT PingonGold FROM settings WHERE username = ?", (user_id,))
     PingonGold = cursor.fetchone()[0]
     reduceMsg = bool(cursor.execute("SELECT ReduceMsgSize FROM settings WHERE username = ?", (user_id,)).fetchone()[0])
-    cursor.execute("SELECT puffroll FROM cooldowns WHERE username = ?", (user_id,))
-    puffrollCooldown = cursor.fetchone()[0]
+    # cursor.execute("SELECT puffroll FROM cooldowns WHERE username = ?", (user_id,))
+    # puffrollCooldown = cursor.fetchone()[0]
     cursor.close()
     conn.close()
 
-    current_time = time()
-    if puffrollCooldown is not None:
-        last_used = puffrollCooldown
-        if current_time - last_used < flags.PUFFROLL_COOLDOWN_TIME:
-            remaining_time = flags.PUFFROLL_COOLDOWN_TIME - (current_time - last_used)
-            await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
-            return
+    if rubies >= flags.PUFFROLL_COST:
+        rubies -= flags.PUFFROLL_COST
+    else:
+        await interaction.response.send_message(f"You don't have enough rubies! You need {flags.PUFFROLL_COST} but you only have {rubies}.", ephemeral=True)
+        return
+
+    # current_time = time()
+    # if puffrollCooldown is not None:
+    #     last_used = puffrollCooldown
+    #     if current_time - last_used < flags.PUFFROLL_COOLDOWN_TIME:
+    #         remaining_time = flags.PUFFROLL_COOLDOWN_TIME - (current_time - last_used)
+    #         await interaction.response.send_message(f"You're on cooldown! Try again in {round(remaining_time, 1)} seconds.", ephemeral=True)
+    #         return
 
     await interaction.response.defer()
     if int(pity) < flags.PITY_LIMIT:
@@ -565,7 +592,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     if int(pity) >= flags.PITY_LIMIT: isRareval += 2
 
     name, description, image_path, weights, isRare = choice
-    chance ='{:.2%}'.format((weights/total_weight)*weightsMultipier.get(isRareval))
+    chance ='{:.2%}'.format(weightsMultipier.get(isRareval)) # (weights/total_weight)*
 
     conn = get_db_connection("assets/database/users.db")
     cursor = conn.cursor()
@@ -575,6 +602,8 @@ async def roll_a_puff(interaction: discord.Interaction):
     ascension = table.get(name, -1)
     if ascension < flags.ASCENSION_MAX:
         table[name] = ascension+1
+    elif isRareval >= 2: # Only counts excess ascensions for gold and limited puffs
+        cursor.execute("UPDATE stats SET excessAscension = excessAscension + 1 WHERE username = ?", (user_id,))
     table = dict(sorted(table.items()))
 
     cursor.execute("UPDATE stats SET rolls = rolls + 1, pity = pity + 1, " + table_name + " = ? WHERE username = ?", (pack_info(table), user_id,))
@@ -588,7 +617,8 @@ async def roll_a_puff(interaction: discord.Interaction):
         )
     elif int(isRare) == 1:
         cursor.execute("UPDATE stats SET purple = purple + 1 WHERE username = ?", (user_id,))
-    cursor.execute("UPDATE cooldowns SET puffroll = ? WHERE username = ?", (current_time, user_id,))
+    cursor.execute("UPDATE stats SET rubies = ? WHERE username = ?", (rubies, user_id,))
+    # cursor.execute("UPDATE cooldowns SET puffroll = ? WHERE username = ?", (current_time, user_id,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -718,7 +748,7 @@ class DropRatesView(discord.ui.View):
     def generate_embed(self):
         isRaretoWeight = {0:self.total_weight0, 1:self.total_weight1, 2:self.total_weight2, 3:self.total_weight3,}
 
-        embed = discord.Embed(title="📊 Puff Drop Rates", color=discord.Color.gold())
+        embed = discord.Embed(title="Puff Drop Rates", color=discord.Color.gold())
 
         start = self.page * self.items_per_page
         end = start + self.items_per_page
@@ -726,10 +756,10 @@ class DropRatesView(discord.ui.View):
 
         for name, weight, isRare in page_items:
             chance = '{:.2%}'.format((weight / isRaretoWeight.get(isRare))*weightsMultipier.get(isRare)) # Convert to percentage
-            if isRare == 3: embed.add_field(name=name+" <:gray_square:1342727158673707018>", value=chance, inline=False)
-            elif isRare == 2: embed.add_field(name=name+" :yellow_square:", value=chance, inline=False)
-            elif isRare == 1: embed.add_field(name=name+" :purple_square:", value=chance, inline=False)
-            else: embed.add_field(name=name+" :blue_square:", value=chance, inline=False)
+            if isRare == 3: embed.add_field(name=name +" <:gray_square:1342727158673707018>", value=chance, inline=False)
+            elif isRare == 2: embed.add_field(name=name +" :yellow_square:", value=chance, inline=False)
+            elif isRare == 1: embed.add_field(name=name +" :purple_square:", value=chance, inline=False)
+            else: embed.add_field(name=name +" :blue_square:", value=chance, inline=False)
 
 
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items) // self.items_per_page + 1}")
@@ -741,7 +771,7 @@ class DropRatesView(discord.ui.View):
             self.page -= 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="➡️ Next", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.items):
             self.page += 1
@@ -795,8 +825,6 @@ async def suggestions(interaction: discord.Interaction):
     """
     embed = discord.Embed(title="Please direct your feedback here", color=discord.Color.fuchsia())
     embed.add_field(name="Please redirect your suggestions to this google form", value="*https://forms.gle/gce7woXR5i38fnXY7*")
-    embed.add_field(name="Please direct any bugs to this google form", value="*https://jumpy-parsley-d39.notion.site/1d345bd163d880008cf5e48ce506eb50?pvs=105*")
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="help", description="AHHHHH, I NEED HELP!!!!")
@@ -905,7 +933,8 @@ class InformationView(discord.ui.View):
                                 f"**{flags.RARITY_WEIGHTS[2]*100}**%, **{flags.RARITY_WEIGHTS[1]*100}**%, and "
                                 f"**{flags.RARITY_WEIGHTS[0]*100}**% from least common to common rarities. "
                                 f"Then if you roll in the {flags.RARITY_WEIGHTS[2]*100}%, there is another roll to decide if you will get a limited "
-                                f"which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank, then each puff's individual weights will apply."
+                                f"which is at **{flags.LIMITED_WEIGHTS[1]*100}**%. After getting selected to your rarity rank. "
+                                f"Each roll costs {flags.PUFFROLL_COST} rubies to roll. Rubies are earned by doing quests or winning battles which give {flags.RUBIES_FROM_WIN} and scales over time."
             },
             {
                 "title": "Pity system",
@@ -921,6 +950,13 @@ class InformationView(discord.ui.View):
                                 f"These affect the stats of your puffs in battle against others. Please check `/statistics` for what you've ascended."
             },
             {
+                "title": "Quests",
+                "description": f"These are just daily tasks you do everyday. You get {flags.MAX_QUESTS} everyday, generated when you run `/quests`. "
+                                f"Each day you complete a quest, your streak gets longer, and the longer your streak is the more rewards you get, "
+                                f"but the difficulty of your challenges increases. Also, at completion, of all your quests, you get the cumulative amount awarded "
+                                f"to your currency of clouds, and half that awarded to your amount of rubies."
+            },
+            {
                 "title": "Comparison calculations",
                 "description": "This works by comparing your rolls to another user, so you can see how lucky you are compared to them. "
                                 "This is done by comparing the amount of KDR (from battles), limited rarity puffs, gold rarity puffs, purple rarity puffs, "
@@ -933,7 +969,9 @@ class InformationView(discord.ui.View):
             {
                 "title": "Battle calculations",
                 "description": "The battling continues for every puff until someone's lineup ends (This **doesn't** give the other side the win). "
-                                "It works by each removing the other puff's health from the attack and checking for a draw, then if the challenger won, then if the opponent won. "
+                                "It works by each removing the other puff's health from their attack. It then uses the defense stats to get a portion that is safe, and not. "
+                                "This is used to take into account the other puff's defense and the combination is used with the true defense stat to calculate final attack. " 
+                                "This entire thing is looped over, checking for winners, and activating specials when needed. "
                                 "The average number of wins is used to calculate the wins and losses. The color logic from the comparison function is also implemented here."
             },
             {
@@ -941,7 +979,7 @@ class InformationView(discord.ui.View):
                 "description": "**Attack**: This is the amount of damage a puff can deal to the opponent's puff.\n"
                                 "**Health**: This is the amount of damage a puff can take before it faints\n"
                                 "**Crit Chance**: This is the chance for a puff to deal extra damage on an attack. It is calculated as a percentage.\n"
-                                "**Crit Damage**: This is the amount of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n"
+                                "**Crit Damage**: This is the percent of extra damage dealt when a critical hit occurs. It is calculated as a percentage of the attack damage.\n"
                                 "**Defense**: This is the percent of damage the puff blocks\n"
                                 "**Defense Penetration**: This is the percent of defense the puff can shred through before it becomes blocked\n"
                                 "**True Defense**: The amount of damage the puff can protect from at all times\n\n"
@@ -962,7 +1000,6 @@ class InformationView(discord.ui.View):
             {
                 "title": "Anything else",
                 "description": "If you have any other information you need to know, just DM me!"
-                
             }
         ]
         self.page = 0
@@ -970,7 +1007,7 @@ class InformationView(discord.ui.View):
 
     def generate_embed(self):
         embed = discord.Embed(
-            title="📘 Good to know about the Puff Bot!",
+            title="Good to know about the Puff Bot!",
             color=discord.Color.dark_orange()
         )
 
@@ -995,7 +1032,7 @@ class InformationView(discord.ui.View):
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="➡️ Next", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.data):
             self.page += 1
@@ -1322,7 +1359,7 @@ class PuffDropdown(discord.ui.View):
             return
 
         selected_puffs = self.select.values
-        await interaction.response.send_message(f"✅ Selected Puffs: {', '.join(selected_puffs)}", ephemeral=True)
+        await interaction.response.send_message(f"Selected Puffs: {', '.join(selected_puffs)}", ephemeral=True)
         battlefunctions.save_lineup(selected_puffs, interaction.user.id)
         # Save the new lineup to the database
 
@@ -1371,7 +1408,7 @@ class RearrangeDropdown(discord.ui.View):
         position_view.add_item(position_select)
 
         # Edit the original message with the new dropdown
-        await interaction.response.edit_message(content=f"🔄 Move **{selected_puff}** to a new position:", view=position_view)
+        await interaction.response.edit_message(content=f"Move **{selected_puff}** to a new position:", view=position_view)
 
         # Position selection callback
         async def position_callback(interaction: discord.Interaction):
@@ -1381,7 +1418,7 @@ class RearrangeDropdown(discord.ui.View):
 
             # Show updated lineup with rearrange button
             lineup_display = "\n".join([f"{i+1}. {puff}" for i, puff in enumerate(self.lineup)])
-            rearrange_again_button = discord.ui.Button(label="🔁 Rearrange Again", style=discord.ButtonStyle.primary)
+            rearrange_again_button = discord.ui.Button(label="Rearrange Again", style=discord.ButtonStyle.primary)
 
             async def rearrange_again_callback(interaction: discord.Interaction):
                 await interaction.response.edit_message(content="Rearrange again", view=RearrangeDropdown(self.lineup))
@@ -1392,7 +1429,7 @@ class RearrangeDropdown(discord.ui.View):
             button_view.add_item(rearrange_again_button)
 
             await interaction.response.edit_message(
-                content=f"✅ **{selected_puff}** moved to position **{new_position+1}**!\n\n📌 Updated Lineup:\n{lineup_display}",
+                content=f"**{selected_puff}** moved to position **{new_position+1}**!\n\n📌 Updated Lineup:\n{lineup_display}",
                 view=button_view
             )
 
@@ -1485,10 +1522,10 @@ class FeedPuffDropdown(discord.ui.View):
             cursor.close()
             conn.close()
 
-            feed_again_button = discord.ui.Button(label="🔁 Feed your puffs again", style=discord.ButtonStyle.primary)
+            feed_again_button = discord.ui.Button(label="Feed your puffs again", style=discord.ButtonStyle.primary)
 
             async def feed_again_callback(interaction: discord.Interaction):
-                await interaction.response.edit_message(content="🔁 Let's feed more puffs!", view=FeedPuffDropdown(self.puff_list, self.user_id))
+                await interaction.response.edit_message(content="Let's feed more puffs!", view=FeedPuffDropdown(self.puff_list, self.user_id))
 
             feed_again_button.callback = feed_again_callback
 
@@ -1496,13 +1533,13 @@ class FeedPuffDropdown(discord.ui.View):
             button_view.add_item(feed_again_button)
 
             await interaction.response.edit_message(
-                content=f"✅ {selected_puff} has been fed {selected_food}!",
+                content=f"{selected_puff} has been fed {selected_food}!",
                 view=button_view
             )
         puff_view = discord.ui.View()
         puff_view.add_item(puff_select)
         puff_select.callback = puff_callback
-        await interaction.response.edit_message(content=f"🍽️ You picked **{selected_food}**. Now select a puff to feed:", view=puff_view)
+        await interaction.response.edit_message(content=f"You picked **{selected_food}**. Now select a puff to feed:", view=puff_view)
 
 @bot.tree.command(name="setup_lineup", description="Set or rearrange your lineup!")
 @discord.app_commands.check(is_banned_user)
@@ -1518,7 +1555,7 @@ async def setup_lineup(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     view = LineupSetupButtons()
-    await interaction.response.send_message("⚔️ Setup your lineup!", view=view, ephemeral=True)
+    await interaction.response.send_message("Setup your lineup!", view=view, ephemeral=True)
     # Handle dropdown for selecting new puffs
 
 class BattleConfirmView(discord.ui.View):
@@ -1531,24 +1568,24 @@ class BattleConfirmView(discord.ui.View):
         self.opponent = opponent
         self.result = None
 
-    @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id == self.opponent.id:
             self.result = True
             await interaction.response.edit_message(
-                content=f"⚔️ Battle confirmed between {self.challenger.mention} and {self.opponent.mention}!",
+                content=f"Battle confirmed between {self.challenger.mention} and {self.opponent.mention}!",
                 view=None
             )
             self.stop()
         else:
             await interaction.response.send_message("You're not the chosen opponent!", ephemeral=True)
 
-    @discord.ui.button(label="❌ Decline", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
     async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id == self.opponent.id:
             self.result = False
             await interaction.response.edit_message(
-                content=f"❌ {self.opponent.mention} declined the battle!",
+                content=f"{self.opponent.mention} declined the battle!",
                 view=None
             )
             self.stop()
@@ -1848,24 +1885,24 @@ class LineupView(discord.ui.View):
             self.page -= 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="➡️ Next", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page + 1 < len(self.items):
             self.page += 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="🔄 Sort by Name", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Sort: Level", style=discord.ButtonStyle.secondary)
     async def toggle_sort(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.sort_by_level = not self.sort_by_level
-        button.label = "🔄 Sort by Level" if not self.sort_by_level else "🔄 Sort by Name"
+        button.label = "Sort: Name" if not self.sort_by_level else "Sort: Level"
         self.update_puff_data()
         self.page = 0  # Reset to the first page after sorting
         await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="🔄 Change to Ascending Order", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Sort: Descending", style=discord.ButtonStyle.secondary)
     async def flip_order(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.level_order = not self.level_order
-        button.label = "🔄 Change to Descending Order" if not self.level_order else "🔄 Change to Ascending Order"
+        button.label = "Sort: Ascending" if not self.level_order else "Sort: Descending"
         self.update_puff_data()
         self.page = 0  # Reset to the first page after sorting
         await interaction.response.edit_message(embed=self.generate_embed(), view=self)
@@ -1979,6 +2016,7 @@ class ShopView(discord.ui.View):
         # Fetch user's money from the database
         cursor.execute("SELECT money FROM stats WHERE username = ?", (self.user_id,))
         self.money = cursor.fetchone()[0]
+        self.moneyOrg = self.money
         cursor.close()
         conn.close()
         self.items = {"Crit Snack": 10, "Turtle Potion": 15, "King Puff's Shield": 30, "Stelle's Bat": 10}
@@ -2083,6 +2121,7 @@ class ShopView(discord.ui.View):
         # Update user's money
         cursor.execute("UPDATE stats SET money = ? WHERE username = ?", (self.money, self.user_id))
         cursor.execute("SELECT food FROM items WHERE username = ?", (self.user_id,))
+        cursor.execute("UPDATE log_on_info SET shopOpen = shopOpen + 1, cloudsSpent = cloudsSpent + ?, WHERE username = ?", (self.moneyOrg-self.money, self.user_id,))
         current_items = unpack_info(cursor.fetchone()[0], True)
         # Update purchased items in the database
         for item, amount in self.bought_items.items():
@@ -2096,7 +2135,7 @@ class ShopView(discord.ui.View):
         conn.close()
         self.stop()
 
-@bot.tree.command(name="shop", description="A closed marketplace for you to buy items")
+@bot.tree.command(name="shop", description="A marketplace for you to buy items")
 @discord.app_commands.check(is_banned_user)
 async def shop(interaction: discord.Interaction):
     """
@@ -2110,6 +2149,209 @@ async def shop(interaction: discord.Interaction):
     :type interaction: discord.Interaction
     """
     view = ShopView(interaction.user.id)
+    await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=True)
+
+@bot.command()
+async def help(ctx):
+    if ctx.author.id in ADMIN_USERS:
+        await devdocs(ctx)
+    else:
+        await ctx.send("Use `/help` to see the user commands!")
+
+class QuestsView(discord.ui.View):
+    '''
+    The `QuestsView` class in Python creates a Discord UI view for quests, allowing users to view
+    available quests and claim rewards.
+    '''
+
+    def update_predicted_streak_date(self):
+        """
+        Update the predicted streak date based on the current streak and streak start date.
+        """
+        start_date = datetime.fromtimestamp(self.streakStart).date()
+        self.predictedStreakDate = start_date + timedelta(days=self.streak)
+
+    def check_streak(self):
+        """
+        Check the user's current streak and update it if necessary based on the last check-in time.
+        """
+        self.today = date.today()
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT streak, streakStart, maxStreak FROM log_on_info WHERE username = ?", (self.user_id,))
+        self.streak, self.streakStart, self.maxStreak = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        self.update_predicted_streak_date()
+
+        if self.predictedStreakDate < self.today:
+            self.maxStreak = max(self.maxStreak, self.streak)
+            self.streak = 0
+            conn = get_db_connection("assets/database/users.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE log_on_info SET streak = ?, maxStreak = ? WHERE username = ?", (self.streak, self.maxStreak, self.user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+        return self.predictedStreakDate < self.today
+
+    def generate_quests(self):
+        """
+        Generate quests for the user based on their current streak and update the database accordingly.
+        """
+        
+        for challenge in self.challenges:
+            challenge["reward"] = round_int(challenge["reward"] * sigmoid_scale(self.streak, 9, .37, 15, 1))
+            if "[placeholder]" in challenge["description"]:
+                challenge["placeholder"] = round_int(challenge["placeholder"]*sigmoid_scale(self.streak, 11, .25, 12, 1))
+                challenge["description"] = challenge["description"].replace("[placeholder]", str(challenge["placeholder"]))
+        
+        self.tasks = choices(self.challenges, k=flags.MAX_QUESTS)
+        self.tasks = ";".join([f"{task['index']}_{task['description']}_{task['reward']}{'_' + str(task['placeholder']) if task.get('placeholder') is not None else ''}" for task in self.tasks])
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE log_on_info SET tasks = ?, lastGeneration = ? WHERE username = ?", (self.tasks, time(), self.user_id))
+        cursor.execute("UPDATE log_on_info SET shopOpen = DEFAULT, battleWon = DEFAULT, cloudsSpent = DEFAULT WHERE username = ?", (self.user_id,))
+        conn.commit()
+        self.shop_open = self.battle_won = self.clouds_spent = 0
+        self.tasks = [task.split("_") for task in self.tasks.split(";")]
+        cursor.close()
+        conn.close()
+
+    def __init__(self, user_id):
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        self.user_id = user_id
+        check_account(self.user_id)
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT battleWon, shopOpen, cloudsSpent, tasks, lastGeneration, checkinTime FROM log_on_info WHERE username = ?", (self.user_id,))
+        self.battle_won, self.shop_open, self.clouds_spent, self.tasks, self.lastGeneration, self.checkinTime = cursor.fetchone()
+        self.tasks = [task.split("_") for task in self.tasks.split(";")]
+        cursor.close()
+        conn.close()
+        self.challenges = deepcopy(flags.QUEST_CHALLENGES)
+        self.today = date.today()
+        start_date = datetime.fromtimestamp(self.streakStart).date()
+        self.predictedStreakDate = start_date + timedelta(days=self.streak)
+
+        self.check_streak()
+
+        if self.today != datetime.fromtimestamp(self.lastGeneration).date():
+            self.generate_quests()
+
+        self.generate_embed()
+
+    def generate_embed(self):
+        embed = discord.Embed(title="Your Quests", color=discord.Color.blue())
+        embed.add_field(name="Current Streak", value=f"{self.streak} day{'s' if self.streak != 1 else ''}", inline=False)
+        embed.add_field(name="Max Streak", value=f"{self.maxStreak} day{'s' if self.maxStreak != 1 else ''}", inline=False)
+        quests = []
+        for i, task in enumerate(self.tasks):
+            quest_text = f"{i + 1}. {task[1]} - Reward: {task[2]}"
+            progress_func = flags.QUEST_PROGRESS_FUNCTIONS[int(task[0])]
+            progress_text = progress_func(self, task)
+            if progress_text:
+                quests.append(f"{quest_text}\n    - {progress_text}")
+            else:
+                quests.append(quest_text)
+        embed.add_field(name="Today's Quests", value="\n".join(quests), inline=False)
+        embed.set_footer(text="Complete quests to earn rewards and increase your streak!")
+        return embed
+
+    @discord.ui.button(label="Claim Rewards", style=discord.ButtonStyle.primary)
+    async def claim_rewards(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """
+        Claim rewards for completed quests and update the user's streak and rewards in the database.
+        """
+        self.today = date.today()
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT lastClaim, battleWon, cloudsSpent, shopOpen, checkinTime, streakStart, streak FROM log_on_info WHERE username = ?", (self.user_id,))
+        self.last_claim, self.battle_won, self.clouds_spent, self.shop_open, self.checkinTime, self.streakStart, self.streak = cursor.fetchone()
+        self.update_predicted_streak_date()
+        if datetime.fromtimestamp(self.last_claim).date() == self.today:
+            await interaction.response.send_message("You've already claimed your rewards for today!", ephemeral=True)
+            cursor.close()
+            conn.close()
+            return
+
+        rewards_claimed = []
+        for task in self.tasks:
+            key = int(task[0])
+            if flags.QUEST_CHECK_FUNCTIONS[key](self, task):
+                rewards_claimed.append((task[1], int(task[2])))
+        if rewards_claimed and len(rewards_claimed) == len(self.tasks):
+            total_reward = sum(reward for _, reward in rewards_claimed)
+            now = time()
+            cursor.execute("UPDATE stats SET money = money + ? WHERE username = ?", (total_reward, self.user_id))
+            cursor.execute("UPDATE stats SET rubies = rubies + ? WHERE username = ?", (round_int(total_reward / 2), self.user_id))
+            cursor.execute("UPDATE log_on_info SET lastClaim = ? WHERE username = ?", (now, self.user_id))
+            self.update_predicted_streak_date()
+            if self.predictedStreakDate != self.today:
+                if self.check_streak():
+                    await interaction.response.send_message("Your streak has been reset due to missing a day. Please rerun this function to see your new quests", ephemeral=True)
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    return
+                else:
+                    cursor.execute("UPDATE log_on_info SET streak = streak + 1 WHERE username = ?", (self.user_id,))
+            if self.streak == 0:
+                cursor.execute("UPDATE log_on_info SET streakStart = ? WHERE username = ?", (now, self.user_id))
+            conn.commit()
+            await interaction.response.send_message(f"You've claimed rewards for today! Total reward: {total_reward} clouds.", ephemeral=True)
+        else:
+            await interaction.response.send_message("You haven't completed all the quests yet!", ephemeral=True)
+        cursor.close()
+        conn.close()
+
+    @discord.ui.button(label="Check In", style=discord.ButtonStyle.secondary)
+    async def check_in(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """
+        Check in for the day to maintain or increase the user's streak, and update the database accordingly.
+        """
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT checkinTime FROM log_on_info WHERE username = ?", (self.user_id,))
+        self.checkinTime = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        self.today = date.today()
+        if self.today == datetime.fromtimestamp(self.checkinTime).date():
+            await interaction.response.send_message("You've already checked in today!", ephemeral=True)
+            return
+        else:
+            self.checkinTime = time()
+        conn = get_db_connection("assets/database/users.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE log_on_info SET checkinTime = ? WHERE username = ?", (self.checkinTime, self.user_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        await interaction.response.send_message(f"Checked in!")
+
+    async def on_timeout(self):
+        """
+        On timeout, stop the view to prevent further interactions.
+        """
+        if flags.DEBUG:
+            print("Debug: QuestsView timed out")
+
+@bot.tree.command(name="quests", description="View available quests and claim rewards")
+@discord.app_commands.check(is_banned_user)
+async def quests(interaction: discord.Interaction):
+    """
+    This Python function creates a quest interface in a Discord bot, allowing users to view available
+    quests and claim rewards.
+
+    :param interaction: The `interaction` parameter in the `quests` function represents the interaction
+    between the user and the Discord bot. It contains information about the user who triggered the
+    command, the channel where the interaction occurred, and other relevant details needed to process
+    the command and respond to the user
+    :type interaction: discord.Interaction
+    """
+    view = QuestsView(interaction.user.id)
     await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=True)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
@@ -2371,9 +2613,9 @@ async def getdata(ctx, *, arg: ToLowerConverter):
     conn.close()
 
     image_path = flags.IMAGE_PATH + f"puffs/{file}?=raw"
-    weightString = f"{rarityWeight*weightsMultipier.get(isRare)*100}%"
+    weightString = f"{rarityWeight*weightsMultipier.get(isRare, 0)*100}%"
     if isRare >= 2:
-        weightString += f" and {weightsMultipier.get(isRare+2)*100}%"
+        weightString += f" and {weightsMultipier.get(isRare+2, 0)*100}%"
 
     embed = discord.Embed(title="Puff Info", color=discord.Color.darker_grey())
     embed.add_field(name="Name", value=name, inline=False)
@@ -2498,12 +2740,6 @@ async def devdocs(ctx):
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
 
-@bot.command()
-async def help(ctx):
-    if ctx.author.id in ADMIN_USERS:
-        await devdocs(ctx)
-    else:
-        await ctx.send("Use `/help` to see the user commands!")
 ### All the functions below this comment are to catch errors (or are coro args) ###
 
 async def checkMessage(message: discord.Message):

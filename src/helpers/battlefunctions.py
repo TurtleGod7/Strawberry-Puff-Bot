@@ -1,10 +1,10 @@
 from _collections_abc import Sequence
 from re import sub
-from helpers.flags import DEBUG, MONEY_FROM_WIN
+from helpers.flags import DEBUG, MONEY_FROM_WIN, RUBIES_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
 from random import randint, choice
-from main import round_int
+from main import round_int, sigmoid_scale
 
 effectivenessChart: dict[str, dict[str, float]] = {
     "Melee": {"Melee": 0, "Ranged": .25, "Magic": -.25, "Support": 0, "Tank": -.25},
@@ -672,10 +672,13 @@ def finalize_battle(winner: int, loser: int) -> None:
     conn = connect("assets\\database\\users.db") if os_name == "nt" else connect("assets/database/users.db")
     cursor = conn.cursor()
 
+    cursor.execute("SELECT streak FROM log_on_info WHERE username = ?", (winner,))
+    streak = cursor.fetchone()[0]
     cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(winner,), (loser,)])
     cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (winner,))
     cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (loser,))
-    cursor.execute("UPDATE stats SET money = money + " + str(MONEY_FROM_WIN) + " WHERE username = ?", (winner,))
+    cursor.execute("UPDATE stats SET money = money + " + str(round_int(MONEY_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + ", rubies = rubies + " + str(round_int(RUBIES_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + "WHERE username = ?", (winner,))
+    cursor.execute("UPDATE log_on_info SET battleWon = battleWon + 1 WHERE username = ?", (winner,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -733,7 +736,7 @@ class RogueliteRun:
             ))
         conn.commit()
         cursor.close()
-
+        conn.close()
 def initialize_roguelite_run(user_id: int) -> RogueliteRun:
     """Start a new roguelite run with base lineup"""
     run = RogueliteRun(user_id)
