@@ -1,6 +1,6 @@
 from os import getenv, path
 from sys import platform
-from random import choices
+from random import choices, sample
 from copy import deepcopy
 from sqlite3 import Connection, connect # If you want to change the format to JSON, go for it but I prefer SQLite3 due to how out of the box it is
 from statistics import mean
@@ -360,6 +360,7 @@ def check_account(username: int) -> None:
     cursor.execute("INSERT OR IGNORE INTO pvp_lineup (username) VALUES (?)", (username,))
     cursor.execute("INSERT OR IGNORE INTO items (username) VALUES (?)", (username,))
     cursor.execute("INSERT OR IGNORE INTO cooldowns (username) VALUES (?)", (username,))
+    cursor.execute("INSERT OR IGNORE INTO log_on_info (username) VALUES (?)", (username,))
     conn.commit()
     cursor.close()
     conn.close()
@@ -400,7 +401,7 @@ async def on_ready():
             "imagepath"	TEXT NOT NULL UNIQUE,
             "weight" REAL,
             "isRare" NUMERIC NOT NULL DEFAULT 0,
-            "stats"	TEXT DEFAULT NULL,
+            "stats"	TEXT DEFAULT NULL
         )
         """)
 
@@ -414,7 +415,7 @@ async def on_ready():
     if flags.TABLE_CREATION:
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS stats (
-            "username" PRIMARY KEY INTEGER NOT NULL UNIQUE,
+            "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "rolls"	INTEGER NOT NULL DEFAULT 0,
             "limited" INTEGER NOT NULL DEFAULT 0,
             "gold" INTEGER NOT NULL DEFAULT 0,
@@ -428,7 +429,7 @@ async def on_ready():
             "totalBattles" INTEGER NOT NULL DEFAULT 0,
             "money" INTEGER NOT NULL DEFAULT 0,
             "rubies" INTEGER NOT NULL DEFAULT 30,
-            "excessAscension" INTEGER NOT NULL DEFAULT 0,
+            "excessAscension" INTEGER NOT NULL DEFAULT 0
         )
         """)
 
@@ -442,7 +443,7 @@ async def on_ready():
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS pvp_lineup (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "lineup" TEXT DEFAULT NULL,
+            "lineup" TEXT DEFAULT NULL
         )
         """)
 
@@ -450,14 +451,14 @@ async def on_ready():
         CREATE TABLE IF NOT EXISTS cooldowns (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
             "battle" REAL NOT NULL DEFAULT 0,
-            "puffroll" REAL NOT NULL DEFAULT 0,
+            "puffroll" REAL NOT NULL DEFAULT 0
         )
         """)
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS banned_users (
             "username" INTEGER PRIMARY KEY NOT NULL UNIQUE,
-            "time" INTEGER NOT NULL DEFAULT 0,
+            "time" INTEGER NOT NULL DEFAULT 0
         )
         """)
 
@@ -473,7 +474,7 @@ async def on_ready():
             "checkinTime" REAL NOT NULL DEFAULT 0,
             "shopOpen" INTEGER NOT NULL DEFAULT 0,
             "battleWon" INTEGER NOT NULL DEFAULT 0,
-            "cloudsSpent" INTEGER NOT NULL DEFAULT 0,
+            "cloudsSpent" INTEGER NOT NULL DEFAULT 0
         )
         """)
         cursor.execute("PRAGMA journal_mode=WAL")
@@ -524,7 +525,7 @@ async def on_ready():
 
     print(f'Logged in as {bot.user}')
 
-@bot.tree.command(name="puffroll", description="Roll a random puff")
+@bot.tree.command(name="puffroll", description="Roll a random puff - Costs " + str(flags.PUFFROLL_COST) + " rubies")
 @discord.app_commands.check(is_banned_user)
 async def roll_a_puff(interaction: discord.Interaction):
     """
@@ -555,11 +556,12 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.close()
     conn.close()
 
-    if rubies >= flags.PUFFROLL_COST:
-        rubies -= flags.PUFFROLL_COST
-    else:
-        await interaction.response.send_message(f"You don't have enough rubies! You need {flags.PUFFROLL_COST} but you only have {rubies}.", ephemeral=True)
-        return
+    if not flags.DISABLE_PUFFROLL_COST_EVERYONE or (not flags.DISABLE_PUFFROLL_COST_ADMIN and user_id in ADMIN_USERS):
+        if rubies >= flags.PUFFROLL_COST:
+            rubies -= flags.PUFFROLL_COST
+        else:
+            await interaction.response.send_message(f"You don't have enough rubies! You need {flags.PUFFROLL_COST} but you only have {rubies}.", ephemeral=True)
+            return
 
     # current_time = time()
     # if puffrollCooldown is not None:
@@ -629,11 +631,11 @@ async def roll_a_puff(interaction: discord.Interaction):
     embed = discord.Embed(title="Your Roll Results", color=rareColors.get(isRare))
     if isRare >= 2:
         ascension_text = "is your first time getting this puff!" if table[name] == 0 else f"is your **{table[name]}**{numsuffix.get(table[name], 'th')} ascension"
-        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll a puff of this rarity!\nYou rolled this puff at **{pity}** pity.\nThis {ascension_text}"
         if reduceMsg:
             full_text = f"You got a **{name}**.\nYou rolled this puff at **{pity}** pity."
     else:
-        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll this puff!\n"
+        full_text = f"You got a **{name}**.\nIt is {description}\nIt was a **{chance}** chance to roll a puff of this rarity!\n"
         if reduceMsg:
             full_text = f"You got a **{name}**."
 
@@ -642,7 +644,7 @@ async def roll_a_puff(interaction: discord.Interaction):
         value=full_text
     )
     if not reduceMsg: embed.set_image(url=image_path)
-    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    embed.set_footer(text=f"Requested by {interaction.user.display_name} - {rubies} rubies remaining")
 
     message = await interaction.followup.send(embed=embed, wait=True)
 
@@ -765,19 +767,19 @@ class DropRatesView(discord.ui.View):
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items) // self.items_per_page + 1}")
         return embed
 
-    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🠄 Prev", style=discord.ButtonStyle.primary)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next 🠆", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.items):
             self.page += 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-@bot.tree.command(name="chances", description="Displays the chances for each puff")
+# @bot.tree.command(name="chances", description="Displays the chances for each puff")
 @discord.app_commands.check(is_banned_user)
 async def drop_rates(interaction: discord.Interaction):
     """
@@ -853,10 +855,10 @@ async def docs(interaction: discord.Interaction):
         name="/statistics",
         value="This is the statistics function so you can understand more about your luck."
     )
-    embed.add_field(
-        name="/chances",
-        value="This is the chances function that displays information for each puff."
-    )
+    # embed.add_field(
+    #     name="/chances",
+    #     value="This is the chances function that displays information for each puff."
+    # )
     embed.add_field(
         name="/suggestions",
         value="Use this function to give us any suggestions"
@@ -901,6 +903,14 @@ async def docs(interaction: discord.Interaction):
         name="/shop",
         value="Use this function to view the shop and buy items"
     )
+    embed.add_field(
+        name="/quests",
+        value="Use this function to view your quests and claim them"
+    )
+    embed.add_field(
+        name="/wallet",
+        value="Use this function to view your current amount of rubies and clouds"
+    )
     embed.set_footer(text=f"Requested by {interaction.user.display_name}")
 
     await interaction.response.send_message(embed=embed)
@@ -919,7 +929,7 @@ class InformationView(discord.ui.View):
                                 "2. :yellow_square: is a gold rarity puff which is the next highest\u200b\n"
                                 "3. :purple_square: is a purple rarity puff that is the third rarest puff to get\u200b\n"
                                 "4. Finally a :blue_square: is a blue rarity puff that is the most common type to get\n"
-                                "Please check the `/chances` function to see what they correlate to."
+                                # "Please check the `/chances` function to see what they correlate to."
             },
             {
                 "title": "How is information saved?",
@@ -1024,7 +1034,7 @@ class InformationView(discord.ui.View):
         embed.set_footer(text=f"Page {self.page + 1} / {total_pages}")
         return embed
 
-    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🠄 Prev", style=discord.ButtonStyle.primary)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
@@ -1032,7 +1042,7 @@ class InformationView(discord.ui.View):
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next 🠆", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if (self.page + 1) * self.items_per_page < len(self.data):
             self.page += 1
@@ -1323,45 +1333,111 @@ class LineupSetupButtons(discord.ui.View):
         # Trigger feed puff function
 
 class PuffDropdown(discord.ui.View):
-    '''
-    The `PuffDropdown` class creates a dropdown menu for selecting puffs, with options based on a
-    provided list, and handles the callback to save the selected puffs to a database.
-    '''
-    def __init__(self, puff_list: dict):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
-        self.puff_list = puff_list
+    DISCORD_SELECT_LIMIT = 25
 
-        # Create dropdown directly in the View
-        if not puff_list:
+    def __init__(self, puff_list: dict, page: int = 0, selected: list = None):
+        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        self.select_was_used = False
+        self.puff_list = puff_list
+        self.page = page
+        self.selected = list(selected) if selected else []
+
+        all_items = list(puff_list.items())
+        self.total_pages = ceil(len(all_items) / self.DISCORD_SELECT_LIMIT)
+        start = page * self.DISCORD_SELECT_LIMIT
+        page_items = all_items[start:start + self.DISCORD_SELECT_LIMIT]
+        self.page_puff_names = [puff for puff, _ in page_items]
+
+        if not page_items:
             options = [discord.SelectOption(label="No puffs available", value="none")]
             self.select = discord.ui.Select(
                 placeholder="No puffs available",
                 options=options,
                 disabled=True
             )
-        else:
-            options = [
-                discord.SelectOption(label=f"{puff} (Lvl {level})", value=puff) for puff, level in puff_list.items()
-            ]
-            self.select = discord.ui.Select(
-                placeholder="Choose your puffs!",
-                options=options,
-                min_values=1,
-                max_values=min(len(puff_list), 5)
-            )
+            self.add_item(self.select)
+            return
 
+        selected_on_this_page = [p for p in self.selected if p in self.page_puff_names]
+        remaining = 5 - len(self.selected)
+
+        options = [
+            discord.SelectOption(
+                label=f"{puff} (Lvl {level})",
+                value=puff,
+                default=puff in self.selected
+            )
+            for puff, level in page_items
+        ]
+
+        self.select = discord.ui.Select(
+            placeholder=f"Page {page + 1}/{self.total_pages} — {len(self.selected)}/5 puffs chosen",
+            options=options,
+            min_values=0,
+            max_values=min(len(page_items), len(selected_on_this_page) + remaining)
+        )
         self.select.callback = self.select_puffs_callback
         self.add_item(self.select)
 
-    async def select_puffs_callback(self, interaction: discord.Interaction):
-        if self.select.values[0] == "none":
-            await interaction.response.send_message("You don't have any puffs to select.", ephemeral=True)
-            return
+        if page > 0:
+            prev_btn = discord.ui.Button(label="🠄 Prev", style=discord.ButtonStyle.secondary)
+            prev_btn.callback = self.prev_callback
+            self.add_item(prev_btn)
 
-        selected_puffs = self.select.values
-        await interaction.response.send_message(f"Selected Puffs: {', '.join(selected_puffs)}", ephemeral=True)
-        battlefunctions.save_lineup(selected_puffs, interaction.user.id)
-        # Save the new lineup to the database
+        if page < self.total_pages - 1:
+            next_btn = discord.ui.Button(label="Next 🠆", style=discord.ButtonStyle.secondary)
+            next_btn.callback = self.next_callback
+            self.add_item(next_btn)
+
+        confirm_btn = discord.ui.Button(
+            label=f"Confirm ({len(self.selected)}/5)",
+            style=discord.ButtonStyle.success,
+            disabled=len(self.selected) == 0
+        )
+        confirm_btn.callback = self.confirm_callback
+        self.add_item(confirm_btn)
+
+    def apply_page_selections(self):
+        if self.select_was_used:
+            updated = [p for p in self.selected if p not in self.page_puff_names]
+            for puff in self.select.values:
+                if len(updated) < 5 and puff not in updated:
+                    updated.append(puff)
+            self.selected = updated
+
+    async def select_puffs_callback(self, interaction: discord.Interaction):
+        self.select_was_used = True
+        self.apply_page_selections()
+        await interaction.response.edit_message(
+            view=PuffDropdown(self.puff_list, self.page, self.selected)
+        )
+
+    async def prev_callback(self, interaction: discord.Interaction):
+        self.apply_page_selections()
+        await interaction.response.edit_message(
+            view=PuffDropdown(self.puff_list, self.page - 1, self.selected)
+        )
+
+    async def next_callback(self, interaction: discord.Interaction):
+        self.apply_page_selections()
+        await interaction.response.edit_message(
+            view=PuffDropdown(self.puff_list, self.page + 1, self.selected)
+        )
+
+    async def confirm_callback(self, interaction: discord.Interaction):
+        self.apply_page_selections()
+        if not self.selected:
+            await interaction.response.send_message("No puffs selected.", ephemeral=True)
+            return
+        try:
+            battlefunctions.save_lineup(self.selected, interaction.user.id)
+            await interaction.response.edit_message(
+                content=f"Lineup saved: {', '.join(self.selected)}",
+                view=None
+            )
+            self.stop()
+        except Exception:
+            await interaction.response.send_message("Failed to save lineup. Please try again later.", ephemeral=True)
 
 class RearrangeDropdown(discord.ui.View):
     '''
@@ -1378,7 +1454,7 @@ class RearrangeDropdown(discord.ui.View):
             options=[discord.SelectOption(label="No puffs available", value="none")],
             disabled=True
         )
-        if not lineup: self.add_item(item=disabled_item)
+        if not lineup: self.add_item(disabled_item)
         else:
             # Dropdown for selecting the puff to move
             self.select = discord.ui.Select(
@@ -1402,14 +1478,7 @@ class RearrangeDropdown(discord.ui.View):
             placeholder="Choose a new position",
             options=positions
         )
-
-        # Create a new view for position selection
-        position_view = discord.ui.View()
-        position_view.add_item(position_select)
-
-        # Edit the original message with the new dropdown
-        await interaction.response.edit_message(content=f"Move **{selected_puff}** to a new position:", view=position_view)
-
+        
         # Position selection callback
         async def position_callback(interaction: discord.Interaction):
             new_position = int(position_select.values[0])
@@ -1429,12 +1498,17 @@ class RearrangeDropdown(discord.ui.View):
             button_view.add_item(rearrange_again_button)
 
             await interaction.response.edit_message(
-                content=f"**{selected_puff}** moved to position **{new_position+1}**!\n\n📌 Updated Lineup:\n{lineup_display}",
+                content=f"**{selected_puff}** moved to position **{new_position+1}**!\n\n Updated Lineup:\n{lineup_display}",
                 view=button_view
             )
 
+        # Create a new view for position selection
+        position_view = discord.ui.View()
         position_select.callback = position_callback
+        position_view.add_item(position_select)
 
+        # Edit the original message with the new dropdown
+        await interaction.response.edit_message(content=f"Move **{selected_puff}** to a new position:", view=position_view)
 class FeedPuffDropdown(discord.ui.View):
     '''
     The `FeedPuffDropdown` class in Python creates a dropdown menu for selecting food, then prompts the user to pick a puff to feed, and applies the food effect.
@@ -1504,9 +1578,6 @@ class FeedPuffDropdown(discord.ui.View):
 
         async def puff_callback(interaction: discord.Interaction):
             selected_puff = puff_select.values[0]
-            # Apply the food effect to the puff (implement your logic here)
-            # For example, call a function: battlefunctions.feed_puff(selected_puff, selected_food, self.user_id)
-            # Remove one food from inventory
             conn = get_db_connection("assets/database/users.db")
             cursor = conn.cursor()
             self.food[selected_food] -= 1
@@ -1536,6 +1607,7 @@ class FeedPuffDropdown(discord.ui.View):
                 content=f"{selected_puff} has been fed {selected_food}!",
                 view=button_view
             )
+        
         puff_view = discord.ui.View()
         puff_view.add_item(puff_select)
         puff_select.callback = puff_callback
@@ -1879,13 +1951,13 @@ class LineupView(discord.ui.View):
         embed.set_footer(text=f"Page {self.page + 1} / {len(self.items)}")
         return embed
 
-    @discord.ui.button(label="⬅️ Previous", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🠄 Prev", style=discord.ButtonStyle.primary)
     async def previous_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page > 0:
             self.page -= 1
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
 
-    @discord.ui.button(label="Next ➡️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Next 🠆", style=discord.ButtonStyle.primary)
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.page + 1 < len(self.items):
             self.page += 1
@@ -2008,7 +2080,7 @@ class ShopView(discord.ui.View):
     and providing buttons for item selection and confirmation.
     '''
     def __init__(self, user_id):
-        super().__init__(timeout=flags.SETTINGS_EXPIRY)
+        super().__init__(timeout=flags.SHOP_EXPIRY)
         self.user_id = user_id
         check_account(self.user_id)
         conn = get_db_connection("assets/database/users.db")
@@ -2035,7 +2107,7 @@ class ShopView(discord.ui.View):
         embed.add_field(name="Money", value=f"{self.money} clouds")
         embed.add_field(name="Items", value="\n".join(f"{item}: {price} clouds" for item, price in self.items.items()), inline=False)
         embed.add_field(name="Purchased Items", value="\n".join(f"{amount} {item}(s)" for item, amount in self.bought_items.items()), inline=False)
-        embed.set_footer(text="Select an item to purchase | Items won't save until 60 seconds of no activity")
+        embed.set_footer(text=f"Select an item to purchase | Items won't save until {flags.SHOP_EXPIRY} seconds of no activity")
         return embed
 
     @discord.ui.button(label="Crit Snack",style=discord.ButtonStyle.primary,)
@@ -2120,8 +2192,8 @@ class ShopView(discord.ui.View):
         cursor = conn.cursor()
         # Update user's money
         cursor.execute("UPDATE stats SET money = ? WHERE username = ?", (self.money, self.user_id))
+        cursor.execute("UPDATE log_on_info SET shopOpen = shopOpen + 1, cloudsSpent = cloudsSpent + ? WHERE username = ?", (self.moneyOrg-self.money, self.user_id,))
         cursor.execute("SELECT food FROM items WHERE username = ?", (self.user_id,))
-        cursor.execute("UPDATE log_on_info SET shopOpen = shopOpen + 1, cloudsSpent = cloudsSpent + ?, WHERE username = ?", (self.moneyOrg-self.money, self.user_id,))
         current_items = unpack_info(cursor.fetchone()[0], True)
         # Update purchased items in the database
         for item, amount in self.bought_items.items():
@@ -2207,12 +2279,12 @@ class QuestsView(discord.ui.View):
                 challenge["placeholder"] = round_int(challenge["placeholder"]*sigmoid_scale(self.streak, 11, .25, 12, 1))
                 challenge["description"] = challenge["description"].replace("[placeholder]", str(challenge["placeholder"]))
         
-        self.tasks = choices(self.challenges, k=flags.MAX_QUESTS)
+        self.tasks = sample(self.challenges, k=flags.MAX_QUESTS)
         self.tasks = ";".join([f"{task['index']}_{task['description']}_{task['reward']}{'_' + str(task['placeholder']) if task.get('placeholder') is not None else ''}" for task in self.tasks])
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
         cursor.execute("UPDATE log_on_info SET tasks = ?, lastGeneration = ? WHERE username = ?", (self.tasks, time(), self.user_id))
-        cursor.execute("UPDATE log_on_info SET shopOpen = DEFAULT, battleWon = DEFAULT, cloudsSpent = DEFAULT WHERE username = ?", (self.user_id,))
+        cursor.execute("UPDATE log_on_info SET shopOpen = 0, battleWon = 0, cloudsSpent = 0 WHERE username = ?", (self.user_id,))
         conn.commit()
         self.shop_open = self.battle_won = self.clouds_spent = 0
         self.tasks = [task.split("_") for task in self.tasks.split(";")]
@@ -2227,13 +2299,11 @@ class QuestsView(discord.ui.View):
         cursor = conn.cursor()
         cursor.execute("SELECT battleWon, shopOpen, cloudsSpent, tasks, lastGeneration, checkinTime FROM log_on_info WHERE username = ?", (self.user_id,))
         self.battle_won, self.shop_open, self.clouds_spent, self.tasks, self.lastGeneration, self.checkinTime = cursor.fetchone()
-        self.tasks = [task.split("_") for task in self.tasks.split(";")]
+        self.tasks = [task.split("_") for task in self.tasks.split(";")] if self.tasks is not None else []
         cursor.close()
         conn.close()
         self.challenges = deepcopy(flags.QUEST_CHALLENGES)
         self.today = date.today()
-        start_date = datetime.fromtimestamp(self.streakStart).date()
-        self.predictedStreakDate = start_date + timedelta(days=self.streak)
 
         self.check_streak()
 
@@ -2285,22 +2355,27 @@ class QuestsView(discord.ui.View):
             total_reward = sum(reward for _, reward in rewards_claimed)
             now = time()
             cursor.execute("UPDATE stats SET money = money + ? WHERE username = ?", (total_reward, self.user_id))
-            cursor.execute("UPDATE stats SET rubies = rubies + ? WHERE username = ?", (round_int(total_reward / 2), self.user_id))
+            cursor.execute("UPDATE stats SET rubies = rubies + ? WHERE username = ?", (total_reward, self.user_id))
             cursor.execute("UPDATE log_on_info SET lastClaim = ? WHERE username = ?", (now, self.user_id))
             self.update_predicted_streak_date()
-            if self.predictedStreakDate != self.today:
-                if self.check_streak():
-                    await interaction.response.send_message("Your streak has been reset due to missing a day. Please rerun this function to see your new quests", ephemeral=True)
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-                    return
-                else:
-                    cursor.execute("UPDATE log_on_info SET streak = streak + 1 WHERE username = ?", (self.user_id,))
+            if self.predictedStreakDate < self.today and self.predictedStreakDate != date(1969, 12, 31):
+                await interaction.response.send_message("Your streak has been reset due to missing a day. Please rerun this function to see your new quests", ephemeral=True)
+                conn.commit()
+                cursor.close()
+                conn.close()
+                return
+            else:
+                cursor.execute("UPDATE log_on_info SET streak = streak + 1 WHERE username = ?", (self.user_id,))
+
             if self.streak == 0:
                 cursor.execute("UPDATE log_on_info SET streakStart = ? WHERE username = ?", (now, self.user_id))
+                self.streak +=1
+            else: self.streak += 1
+            self.maxStreak = max(self.streak, self.maxStreak)
+            cursor.execute("UPDATE log_on_info SET maxStreak = " + str(self.maxStreak) + " WHERE username = ?", (self.user_id,))
             conn.commit()
-            await interaction.response.send_message(f"You've claimed rewards for today! Total reward: {total_reward} clouds.", ephemeral=True)
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+            await interaction.followup.send(f"You've claimed rewards for today! Total reward: {total_reward} clouds.", ephemeral=True)
         else:
             await interaction.response.send_message("You haven't completed all the quests yet!", ephemeral=True)
         cursor.close()
@@ -2329,7 +2404,10 @@ class QuestsView(discord.ui.View):
         conn.commit()
         cursor.close()
         conn.close()
-        await interaction.response.send_message(f"Checked in!")
+        try:
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+        except Exception:
+            await interaction.response.send_message("Checked in!", ephemeral=True)
 
     async def on_timeout(self):
         """
@@ -2353,6 +2431,31 @@ async def quests(interaction: discord.Interaction):
     """
     view = QuestsView(interaction.user.id)
     await interaction.response.send_message(embed=view.generate_embed(), view=view, ephemeral=True)
+
+@bot.tree.command(name="wallet", description="View your wallet")
+@discord.app_commands.check(is_banned_user)
+async def wallet(interaction: discord.Interaction, visible: bool=False):
+    """
+    This Python function retrieves a user's wallet information from a database and displays it in an
+    embedded message on Discord.
+
+    :param interaction: The `interaction` parameter in the `wallet` function represents the interaction
+    between the user and the Discord bot. It contains information about the user who triggered the
+    command, the channel where the interaction occurred, and other relevant details needed to process
+    the command and respond to the user
+    :type interaction: discord.Interaction
+    """
+    conn = get_db_connection("assets/database/users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT money, rubies FROM stats WHERE username = ?", (interaction.user.id,))
+    money, rubies = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    embed = discord.Embed(title=f"{interaction.user.display_name}'s Wallet", color=discord.Color.dark_green())
+    embed.add_field(name="Clouds", value=f"{money}", inline=False)
+    embed.add_field(name="Rubies", value=f"{rubies}", inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=not visible)
 
 ### All the functions below this comment are for the developer/bot admin users only ###
 
@@ -2735,10 +2838,22 @@ async def devdocs(ctx):
     """
     embed = discord.Embed(title="Developer Docs", color=discord.Color.random())
     embed.add_field(name="How does this work?",value="Your Discord User ID just needs to be added to the enviornment and then you can use all of these commands! Also, these are NOT added to the bot tree", inline=False)
-    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!setvalue` sets a certain value in a table and column in the users db based on a value and a user id, (input order is: person, table, column, value)\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)\n * `!getmaxpity` gives you the max pity in the game", inline=False)
+    embed.add_field(name="Commands", value="* `!get` gets any puff or banner by specifying its file name without the extension\n* `!createacct` creates an account for the user in the specified table\n* `!deleteacct` deletes an account for the user in the specified table\n* `!setvalue` sets a certain value in a table and column in the users db based on a value and a user id, (input order is: person, table, column, value)\n* `!ban` bans a player for a certain amount of seconds\n* `!unban` unbans a player\n* `!getdata` gets the data in the database of a puff by specifying its file name without the extension\n* `!activity_change` changes the activity of the bot to cycle in the statuses list\n* `!statsof` gets the statistics of a user\n* `!getlineup` gets a users full lineup since that information isn't shown in statsof (I'm too lazy to change it now)\n * `!getmaxpity` gives you the max pity in the game\n * `!disablepuffrollcostadmin` and `!disablepuffrollcost` disables the cost of using puff rolls for all admins and users respectively", inline=False)
     embed.add_field(name="What if non-admins find this??", value="Don't worry as the command won't work for them. Also the bot prints their user ID and name to the console in case they spam it", inline=False)
     embed.set_footer(text=f"Requested by Developer: {ctx.author.display_name}")
     await ctx.send(embed=embed)
+
+@bot.command()
+@is_authorised_user()
+async def disablepuffrollcostadmin(ctx):
+    flags.DISABLE_PUFFROLL_COST_ADMIN = not flags.DISABLE_PUFFROLL_COST_ADMIN
+    await ctx.send(f"Disable puff roll cost for admins is now set to {flags.DISABLE_PUFFROLL_COST_ADMIN}")
+
+@bot.command()
+@is_authorised_user()
+async def disablepuffrollcost(ctx):
+    flags.DISABLE_PUFFROLL_COST_EVERYONE = not flags.DISABLE_PUFFROLL_COST_EVERYONE
+    await ctx.send(f"Disable puff roll cost for everyone is now set to {flags.DISABLE_PUFFROLL_COST_EVERYONE}")
 
 ### All the functions below this comment are to catch errors (or are coro args) ###
 

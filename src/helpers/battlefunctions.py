@@ -677,7 +677,7 @@ def finalize_battle(winner: int, loser: int) -> None:
     cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(winner,), (loser,)])
     cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (winner,))
     cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (loser,))
-    cursor.execute("UPDATE stats SET money = money + " + str(round_int(MONEY_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + ", rubies = rubies + " + str(round_int(RUBIES_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + "WHERE username = ?", (winner,))
+    cursor.execute("UPDATE stats SET money = money + " + str(round_int(MONEY_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + ", rubies = rubies + " + str(round_int(RUBIES_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + " WHERE username = ?", (winner,))
     cursor.execute("UPDATE log_on_info SET battleWon = battleWon + 1 WHERE username = ?", (winner,))
     conn.commit()
     cursor.close()

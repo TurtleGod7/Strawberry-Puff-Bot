@@ -17,6 +17,7 @@ GIT_REPO = "Strawberry-Puff-Bot"
 BUTTON_PAGE_EXPIRY = 60
 ITEMS_PER_PAGE = 5
 SETTINGS_EXPIRY = 60
+SHOP_EXPIRY = 15
 ASCENSION_MAX = 10
 AVATAR_PATH = str(Path("assets/puffs/sakura.png")) # This and banner to be used when setting it as a gif
 BANNER_FILE = "banner_luna-khan.png"
@@ -68,7 +69,7 @@ PUFFROLL_COOLDOWN_TIME = 0  # Cooldown in seconds
 BATTLE_COOLDOWN_TIME = 30  # Cooldown in seconds
 MONEY_FROM_WIN = 5
 RUBIES_FROM_WIN = 3
-MAX_QUESTS = 2
+MAX_QUESTS = 3
 QUEST_CHALLENGES = [
     {"index": 0, "description": "Win [placeholder] battle(s)", "reward": 4, "placeholder": 1},
     {"index": 1, "description": "Use the shop", "reward": 2},
@@ -87,4 +88,6 @@ QUEST_PROGRESS_FUNCTIONS = [
     lambda user, task: "Checked in today" if __import__('datetime').datetime.fromtimestamp(user.checkinTime).date() == __import__('datetime').datetime.now().date() else "Not checked in today",
     lambda user, task: f"{user.clouds_spent}/{int(task[3])} clouds spent"
 ]
+DISABLE_PUFFROLL_COST_ADMIN = False
+DISABLE_PUFFROLL_COST_EVERYONE = False
 ###
