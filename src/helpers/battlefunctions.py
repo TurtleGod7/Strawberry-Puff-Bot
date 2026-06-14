@@ -3,6 +3,7 @@ from re import sub
 from helpers.flags import DEBUG, MONEY_FROM_WIN, RUBIES_FROM_WIN
 from sqlite3 import connect
 from os import name as os_name
+from math import sqrt
 from random import randint, choice
 from main import round_int, sigmoid_scale
 
@@ -379,6 +380,18 @@ def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, s
     created using the puff names, attack, health, user_id, and level information obtained from the
     database queries and calculations within the function.
     """
+    def stat_scale(level: int) -> list[int]:
+        s = sqrt(level)
+        return [
+            round(s * 2.53),   # attack      → +8 at L10
+            round(s * 5.69),   # health      → +18 at L10
+            round(s * 1.58),   # critChance  → +5 at L10
+            round(s * 4.74),   # critDmg     → +15 at L10
+            round(s * 1.58),   # defense     → +5 at L10
+            round(s * 1.26),   # defPen      → +4 at L10
+            round(s * 0.95),   # trueDefense → +3 at L10
+        ]
+
     puff_data = []
     final_data = []
     conn = connect("assets\\database\\puffs.db") if os_name == "nt" else connect("assets/database/puffs.db")
@@ -419,9 +432,11 @@ def get_puffs_for_battle(puff_names: list[str], user_id: int, buffs: dict[str, s
         databuff = [0] * 7
 
         # Scale stats based on level
-        data[0] += level # Attack
-        data[1] += level * 2 # health
-        data[4] += round_int(.25*level**1.75) # Defense
+        bonuses = stat_scale(level)
+        for i in range(len(data)):
+            try: data[i] += bonuses[i]
+            except IndexError:
+                print(f"Error: Index out of bounds for puff {puff_names[puff]}")
 
         buffs_to_be_applied = buffs.get(puff_names[puff], "").split("|")
         for buff in buffs_to_be_applied:
@@ -613,8 +628,8 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
                 calcattack = calcattack * (attacker_context[attacker_ranged[rangedpuff]].critDmg * .01 + 1)
                 events.append(f"{attacker_context[attacker_ranged[rangedpuff]].name} crits {defender.name} for {round(calcattack,1 )} damage with ranged support!")
             attack += calcattack
-        SafeDmg = attack * (attacker.defensePenetration*.01)
-        DefendableDmg = (attack - SafeDmg) * (1 - (defender.defense * .01))
+        SafeDmg = attack * (min(attacker.defensePenetration, 60)*.01)
+        DefendableDmg = (attack - SafeDmg) * (1 - (min(defender.defense, 80) * .01))
         attack = SafeDmg + DefendableDmg - defender.trueDefense
         # Type effectiveness
         for type in attacker.types:
@@ -664,7 +679,11 @@ def battle(puff1: Puff | LineupPuff, puff2: Puff | LineupPuff, context1: Sequenc
             events.extend([f"{puff2.name} wins! (Lvl {puff2.level}) - <@{puff2.owner}>", -1])
             continue
         else:
+            print(f"End of round {round_count}")
             events.append(f"End of round {round_count}")
+        if round_count >= 100000:
+            events = ["Bro you hit a 100k rounds...wtf", 0]
+            return events, context1, context2
     return events, context1, context2 # Catch all
     # Change to return a list of events that has happened with score at the end and the new context lists
 
@@ -677,7 +696,7 @@ def finalize_battle(winner: int, loser: int) -> None:
     cursor.executemany("UPDATE stats SET totalBattles = totalBattles + 1 WHERE username = ?", [(winner,), (loser,)])
     cursor.execute("UPDATE stats SET win = win + 1 WHERE username = ?", (winner,))
     cursor.execute("UPDATE stats SET loss = loss + 1 WHERE username = ?", (loser,))
-    cursor.execute("UPDATE stats SET money = money + " + str(round_int(MONEY_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + ", rubies = rubies + " + str(round_int(RUBIES_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))) + " WHERE username = ?", (winner,))
+    cursor.execute("UPDATE stats SET money = money + ? , rubies = rubies + ? WHERE username = ?", (str(round_int(MONEY_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))), str(round_int(RUBIES_FROM_WIN * sigmoid_scale(streak, 5, .25, 10, 0))), winner))
     cursor.execute("UPDATE log_on_info SET battleWon = battleWon + 1 WHERE username = ?", (winner,))
     conn.commit()
     cursor.close()

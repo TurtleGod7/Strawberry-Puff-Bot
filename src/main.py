@@ -471,6 +471,7 @@ async def on_ready():
             "tasks" TEXT DEFAULT NULL,
             "lastGeneration" REAL NOT NULL DEFAULT 0,
             "lastClaim" REAL NOT NULL DEFAULT 0,
+            "amountClaim" INTEGER NOT NULL DEFAULT 0,
             "checkinTime" REAL NOT NULL DEFAULT 0,
             "shopOpen" INTEGER NOT NULL DEFAULT 0,
             "battleWon" INTEGER NOT NULL DEFAULT 0,
@@ -556,7 +557,7 @@ async def roll_a_puff(interaction: discord.Interaction):
     cursor.close()
     conn.close()
 
-    if not flags.DISABLE_PUFFROLL_COST_EVERYONE or (not flags.DISABLE_PUFFROLL_COST_ADMIN and user_id in ADMIN_USERS):
+    if not (flags.DISABLE_PUFFROLL_COST_EVERYONE or (flags.DISABLE_PUFFROLL_COST_ADMIN and user_id in ADMIN_USERS)):
         if rubies >= flags.PUFFROLL_COST:
             rubies -= flags.PUFFROLL_COST
         else:
@@ -893,7 +894,7 @@ async def docs(interaction: discord.Interaction):
     )
     embed.add_field(
         name="/battle",
-        value="Use this function to challenge other players"
+        value="Use this function to challenge other players and earn clouds and rubies"
     )
     embed.add_field(
         name="/preview",
@@ -905,7 +906,7 @@ async def docs(interaction: discord.Interaction):
     )
     embed.add_field(
         name="/quests",
-        value="Use this function to view your quests and claim them"
+        value="Use this function to view your quests and claim them to earn clouds and rubies"
     )
     embed.add_field(
         name="/wallet",
@@ -1862,6 +1863,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
 
     results = []
     scores = []
+    print("before battle events")
     for u_puff, o_puff in zip(user_puffs, opponent_puffs):
         try:
             events, user_puffs, opponent_puffs  = battlefunctions.battle(u_puff, o_puff, user_puffs, opponent_puffs)
@@ -1871,6 +1873,7 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
         except AttributeError:
             results.append("The program broke here, please notify the developer"); scores.append(0)
             raise
+    print("after battle events")
     overall_score = round_int(mean(scores))
     color = weightedColor.get(overall_score)
     winner = interaction.user.display_name
@@ -1879,10 +1882,12 @@ async def battle_command(interaction: discord.Interaction, opponent: discord.Mem
     elif overall_score == 0:
         winner = ""
 
+    print("before finalizing")
     if overall_score > 0:
         battlefunctions.finalize_battle(user_id, opponent_id)
     elif overall_score < 0:
         battlefunctions.finalize_battle(opponent_id, user_id)
+    print("after finalizing")
 
     result_message = shorten_message("\n".join(results), user_id)
     shortened_message = None
@@ -2284,7 +2289,7 @@ class QuestsView(discord.ui.View):
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
         cursor.execute("UPDATE log_on_info SET tasks = ?, lastGeneration = ? WHERE username = ?", (self.tasks, time(), self.user_id))
-        cursor.execute("UPDATE log_on_info SET shopOpen = 0, battleWon = 0, cloudsSpent = 0 WHERE username = ?", (self.user_id,))
+        cursor.execute("UPDATE log_on_info SET amountClaim = 0, shopOpen = 0, battleWon = 0, cloudsSpent = 0 WHERE username = ?", (self.user_id,))
         conn.commit()
         self.shop_open = self.battle_won = self.clouds_spent = 0
         self.tasks = [task.split("_") for task in self.tasks.split(";")]
@@ -2337,26 +2342,23 @@ class QuestsView(discord.ui.View):
         self.today = date.today()
         conn = get_db_connection("assets/database/users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT lastClaim, battleWon, cloudsSpent, shopOpen, checkinTime, streakStart, streak FROM log_on_info WHERE username = ?", (self.user_id,))
-        self.last_claim, self.battle_won, self.clouds_spent, self.shop_open, self.checkinTime, self.streakStart, self.streak = cursor.fetchone()
+        cursor.execute("SELECT lastClaim, battleWon, cloudsSpent, shopOpen, checkinTime, streakStart, streak, amountClaim FROM log_on_info WHERE username = ?", (self.user_id,))
+        self.last_claim, self.battle_won, self.clouds_spent, self.shop_open, self.checkinTime, self.streakStart, self.streak, self.amount_claim = cursor.fetchone()
+        mask = int('1'*flags.MAX_QUESTS, 2)
+        completion_list = list(format(self.amount_claim ^ mask, '0' + str(flags.MAX_QUESTS) + 'b'))
         self.update_predicted_streak_date()
-        if datetime.fromtimestamp(self.last_claim).date() == self.today:
-            await interaction.response.send_message("You've already claimed your rewards for today!", ephemeral=True)
-            cursor.close()
-            conn.close()
-            return
 
         rewards_claimed = []
-        for task in self.tasks:
+        for i, task in enumerate(self.tasks):
             key = int(task[0])
-            if flags.QUEST_CHECK_FUNCTIONS[key](self, task):
+            if flags.QUEST_CHECK_FUNCTIONS[key](self, task) and completion_list[i] == '1':
                 rewards_claimed.append((task[1], int(task[2])))
-        if rewards_claimed and len(rewards_claimed) == len(self.tasks):
+                completion_list[i] = '0'
+        if rewards_claimed:
             total_reward = sum(reward for _, reward in rewards_claimed)
             now = time()
-            cursor.execute("UPDATE stats SET money = money + ? WHERE username = ?", (total_reward, self.user_id))
-            cursor.execute("UPDATE stats SET rubies = rubies + ? WHERE username = ?", (total_reward, self.user_id))
             cursor.execute("UPDATE log_on_info SET lastClaim = ? WHERE username = ?", (now, self.user_id))
+            cursor.execute("UPDATE log_on_info SET amountClaim = ? WHERE username = ?", (int(''.join(completion_list), 2)^mask, self.user_id))
             self.update_predicted_streak_date()
             if self.predictedStreakDate < self.today and self.predictedStreakDate != date(1969, 12, 31):
                 await interaction.response.send_message("Your streak has been reset due to missing a day. Please rerun this function to see your new quests", ephemeral=True)
@@ -2364,20 +2366,26 @@ class QuestsView(discord.ui.View):
                 cursor.close()
                 conn.close()
                 return
-            else:
+            elif completion_list.count('1') == 0:
                 cursor.execute("UPDATE log_on_info SET streak = streak + 1 WHERE username = ?", (self.user_id,))
 
-            if self.streak == 0:
-                cursor.execute("UPDATE log_on_info SET streakStart = ? WHERE username = ?", (now, self.user_id))
+                total_reward += flags.QUEST_COMPLETION_REWARD
+
+                if self.streak == 0:
+                    cursor.execute("UPDATE log_on_info SET streakStart = ? WHERE username = ?", (now, self.user_id))
                 self.streak +=1
-            else: self.streak += 1
-            self.maxStreak = max(self.streak, self.maxStreak)
-            cursor.execute("UPDATE log_on_info SET maxStreak = " + str(self.maxStreak) + " WHERE username = ?", (self.user_id,))
+                self.maxStreak = max(self.streak, self.maxStreak)
+                cursor.execute("UPDATE log_on_info SET maxStreak = ? WHERE username = ?", (self.maxStreak, self.user_id))
+            cursor.execute("UPDATE stats SET money = money + ? WHERE username = ?", (total_reward, self.user_id))
+            cursor.execute("UPDATE stats SET rubies = rubies + ? WHERE username = ?", (total_reward, self.user_id))
             conn.commit()
             await interaction.response.edit_message(embed=self.generate_embed(), view=self)
-            await interaction.followup.send(f"You've claimed rewards for today! Total reward: {total_reward} clouds.", ephemeral=True)
+            await interaction.followup.send(f"You've claimed rewards for today! Total reward: {total_reward} clouds." + "\nCome back again to update your streak" if completion_list.count('1') != 0 else "", ephemeral=True)
         else:
-            await interaction.response.send_message("You haven't completed all the quests yet!", ephemeral=True)
+            if completion_list.count('1') == 0:
+                await interaction.response.send_message(f"You've already completed and claimed all quests for today", ephemeral=True)
+            else:
+                await interaction.response.send_message("You haven't completed any new quests yet!", ephemeral=True)
         cursor.close()
         conn.close()
 

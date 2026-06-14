@@ -70,11 +70,12 @@ BATTLE_COOLDOWN_TIME = 30  # Cooldown in seconds
 MONEY_FROM_WIN = 5
 RUBIES_FROM_WIN = 3
 MAX_QUESTS = 3
+QUEST_COMPLETION_REWARD = 60
 QUEST_CHALLENGES = [
-    {"index": 0, "description": "Win [placeholder] battle(s)", "reward": 4, "placeholder": 1},
-    {"index": 1, "description": "Use the shop", "reward": 2},
-    {"index": 2, "description": "Daily Check-In", "reward": 1},
-    {"index": 3, "description": "Spend [placeholder] clouds", "reward": 2, "placeholder": 5}
+    {"index": 0, "description": "Win [placeholder] battle(s)", "reward": 20, "placeholder": 1},
+    {"index": 1, "description": "Use the shop", "reward": 10},
+    {"index": 2, "description": "Daily Check-In", "reward": 5},
+    {"index": 3, "description": "Spend [placeholder] clouds", "reward": 10, "placeholder": 5}
 ]
 QUEST_CHECK_FUNCTIONS = [
     lambda user, task: user.battle_won >= int(task[3]),
